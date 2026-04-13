@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard — EPIConnect{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-8 animate-fade-in">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Leaderboard</h1>
+            <p class="text-gray-600 dark:text-slate-400 mt-1">Top helpful students of {{ month }}</p>
+        </div>
+        <a href="{% url 'wallet:wallet' %}" class="btn-secondary px-5 py-2.5 text-sm">My Wallet</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Rankings -->
+        <div class="lg:col-span-2 space-y-4">
+            {% if leaderboard %}
+            {% for entry in leaderboard %}
+            <div class="card p-4 flex items-center space-x-4
+                {% if entry.rank == 1 %}ring-2 ring-amber-400/50
+                {% elif entry.rank == 2 %}ring-2 ring-slate-400/50
+                {% elif entry.rank == 3 %}ring-2 ring-amber-700/50{% endif %}">
+
+                <!-- Rank medal -->
+                <div class="w-10 text-center flex-shrink-0">
+                    {% if entry.rank == 1 %}<span class="text-2xl">🥇</span>
+                    {% elif entry.rank == 2 %}<span class="text-2xl">🥈</span>
+                    {% elif entry.rank == 3 %}<span class="text-2xl">🥉</span>
+                    {% else %}<span class="text-lg font-bold text-gray-400 dark:text-slate-500">#{{ entry.rank }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Avatar -->
+                {% with u=entry.wallet.user %}
+                {% if u.profile.profile_picture %}
+                <img src="{{ u.profile.profile_picture.url }}" alt="{{ u.username }}"
+                     class="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-sm">
+                {% else %}
+                <div class="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center shadow-sm
+                    {% if entry.rank == 1 %}bg-gradient-to-br from-amber-400 to-amber-600
+                    {% elif entry.rank == 2 %}bg-gradient-to-br from-slate-400 to-slate-600
+                    {% elif entry.rank == 3 %}bg-gradient-to-br from-amber-600 to-amber-800
+                    {% else %}bg-gradient-to-br from-primary-500 to-primary-700{% endif %}">
+                    <span class="text-white font-bold text-lg">{{ u.username.0|upper }}</span>
+                </div>
+                {% endif %}
+
+                <!-- Name + badges -->
+                <div class="flex-1 min-w-0">
+                    <a href="{% url 'users:profile' u.pk %}"
+                       class="font-semibold text-gray-900 dark:text-slate-100 hover:text-primary-500 transition-colors">
+                        {{ u.get_full_name|default:u.username }}
+                    </a>
+                    {% if entry.badges %}
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        {% for badge in entry.badges %}
+                        <span class="text-base" title="{{ badge.get_badge_type_display }}">{{ badge.meta.icon }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endwith %}
+
+                <!-- Monthly points -->
+                <div class="text-right flex-shrink-0">
+                    <div class="text-xl font-extrabold text-primary-500">{{ entry.monthly_pts }}</div>
+                    <div class="text-xs text-gray-400 dark:text-slate-500">pts this month</div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center py-16">
+                <span class="text-5xl">🏆</span>
+                <p class="text-gray-500 dark:text-slate-400 mt-4">No activity yet this month. Be the first on the board!</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-5">
+            <!-- Badge catalogue -->
+            <div class="card p-6">
+                <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Available Badges</h2>
+                <div class="space-y-3">
+                    {% for b in badge_types %}
+                    <div class="flex items-start space-x-3">
+                        <span class="text-2xl flex-shrink-0">{{ b.icon }}</span>
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800 dark:text-slate-200">{{ b.label }}</p>
+                            <p class="text-xs text-gray-500 dark:text-slate-400">{{ b.desc }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Current user's badges -->
+            {% if user.is_authenticated %}
+            <div class="card p-6">
+                <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Your Badges</h2>
+                {% if user_badges %}
+                <div class="flex flex-wrap gap-4">
+                    {% for badge in user_badges %}
+                    <div class="flex flex-col items-center">
+                        <span class="text-3xl">{{ badge.meta.icon }}</span>
+                        <span class="text-xs text-gray-500 dark:text-slate-400 mt-1 text-center leading-tight">
+                            {{ badge.get_badge_type_display }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 dark:text-slate-500">No badges yet — start helping!</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

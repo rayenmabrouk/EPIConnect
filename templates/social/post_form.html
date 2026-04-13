@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}New Post — Help Wall{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto animate-fade-in">
+    <div class="mb-6">
+        <a href="{% url 'social:feed' %}" class="text-primary-500 hover:text-primary-400 text-sm flex items-center font-medium">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to Help Wall
+        </a>
+    </div>
+
+    <div class="card p-8">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Create a Post</h1>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-4">
+                <label for="{{ form.content.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">What's on your mind?</label>
+                {{ form.content }}
+                {% if form.content.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ form.content.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <div class="flex items-center justify-between mb-6">
+                <label class="flex items-center space-x-2 text-sm text-gray-600 dark:text-slate-400">
+                    {{ form.is_anonymous }}
+                    <span>Post anonymously</span>
+                </label>
+                <span class="text-xs text-gray-400 dark:text-slate-500">Anonymous posts hide your identity</span>
+            </div>
+
+            <button type="submit" class="w-full btn-primary py-3 px-4 text-base">
+                Publish Post
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Campus Perks — EPIConnect{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-8 animate-fade-in">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Campus Perks</h1>
+            <p class="text-gray-600 dark:text-slate-400 mt-1">Redeem your EPI-points for campus rewards</p>
+        </div>
+        <a href="{% url 'wallet:wallet' %}" class="btn-secondary px-5 py-2.5 text-sm flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+            </svg>
+            My Wallet · {{ wallet.balance }} pts
+        </a>
+    </div>
+
+    {% if perks %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {% for perk in perks %}
+        <div class="card p-6 flex flex-col {% if not perk.available %}opacity-60{% endif %}">
+            <!-- Icon & Title -->
+            <div class="flex items-start justify-between mb-3">
+                <span class="text-4xl leading-none">{{ perk.icon }}</span>
+                {% if not perk.available %}
+                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-slate-400">Out of stock</span>
+                {% elif wallet.balance >= perk.cost %}
+                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">Can redeem</span>
+                {% endif %}
+            </div>
+
+            <h3 class="font-semibold text-gray-900 dark:text-slate-100 text-lg mb-1">{{ perk.title }}</h3>
+            <p class="text-sm text-gray-500 dark:text-slate-400 flex-1 mb-4">{{ perk.description }}</p>
+
+            <!-- Cost & Action -->
+            <div class="flex items-center justify-between mt-auto pt-4 border-t border-stone-200 dark:border-slate-700/50">
+                <div>
+                    <span class="text-2xl font-extrabold text-primary-500">{{ perk.cost }}</span>
+                    <span class="text-sm text-gray-400 dark:text-slate-500 ml-1">pts</span>
+                </div>
+                {% if perk.available %}
+                <form method="post" action="{% url 'wallet:redeem' perk.pk %}"
+                      onsubmit="return confirm('Redeem {{ perk.title }} for {{ perk.cost }} EPI-points?')">
+                    {% csrf_token %}
+                    <button type="submit"
+                            {% if wallet.balance < perk.cost %}disabled title="Not enough points"{% endif %}
+                            class="btn-primary px-4 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                        Redeem
+                    </button>
+                </form>
+                {% else %}
+                <button disabled class="btn-secondary px-4 py-2 text-sm opacity-50 cursor-not-allowed">Unavailable</button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-20">
+        <p class="text-gray-400 dark:text-slate-500">No perks available right now. Check back soon!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

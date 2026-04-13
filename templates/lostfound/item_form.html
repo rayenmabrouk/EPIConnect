@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Report Item — Lost & Found{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto animate-fade-in">
+    <div class="mb-6">
+        <a href="{% url 'lostfound:list' %}" class="text-primary-500 hover:text-primary-400 text-sm flex items-center font-medium">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to Lost & Found
+        </a>
+    </div>
+
+    <div class="card p-8">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Report an Item</h1>
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <!-- Item Type Selection -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-3">What happened?</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {% for radio in form.item_type %}
+                    <label class="relative flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200
+                        {% if radio.choice_label == 'I lost something' %}
+                        border-red-500/30 bg-red-500/5 hover:border-red-500/50 dark:border-red-500/20 dark:bg-red-500/5 dark:hover:border-red-500/40
+                        {% else %}
+                        border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50 dark:border-emerald-500/20 dark:bg-emerald-500/5 dark:hover:border-emerald-500/40
+                        {% endif %}">
+                        {{ radio.tag }}
+                        <div class="ml-3">
+                            <span class="block text-sm font-medium text-gray-800 dark:text-slate-200">{{ radio.choice_label }}</span>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% if form.item_type.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ form.item_type.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Title -->
+            <div class="mb-4">
+                <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Title</label>
+                {{ form.title }}
+                {% if form.title.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ form.title.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Description -->
+            <div class="mb-4">
+                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Description</label>
+                {{ form.description }}
+                <p class="text-gray-400 dark:text-slate-500 text-xs mt-1">Describe the item in detail — color, brand, distinguishing features, etc.</p>
+                {% if form.description.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ form.description.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Image -->
+            <div class="mb-4">
+                <label for="{{ form.image.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Photo (optional)</label>
+                {{ form.image }}
+                {% if form.image.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ form.image.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Location & Date -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Location</label>
+                    {{ form.location }}
+                    {% if form.location.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.location.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.date.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Date</label>
+                    {{ form.date }}
+                    {% if form.date.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.date.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <button type="submit" class="w-full btn-primary py-3 px-4 mt-4 text-base">
+                Submit Report
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

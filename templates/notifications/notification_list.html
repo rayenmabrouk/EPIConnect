@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications — EPIConnect{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="flex justify-between items-center mb-8 animate-fade-in">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Notifications</h1>
+            <p class="text-gray-600 dark:text-slate-400 mt-1">Stay up to date</p>
+        </div>
+        {% if notifications %}
+        <form method="post" action="{% url 'notifications:mark_all_read' %}">
+            {% csrf_token %}
+            <button type="submit" class="text-primary-500 hover:text-primary-400 text-sm font-medium transition-colors">
+                Mark all as read
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if notifications %}
+    <div class="card divide-y divide-gray-100 dark:divide-slate-700/50 overflow-hidden">
+        {% for notif in notifications %}
+        <a href="{% url 'notifications:read' notif.pk %}"
+           class="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors {% if not notif.is_read %}bg-primary-50/50 dark:bg-primary-500/5{% endif %}">
+            <!-- Icon -->
+            <div class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center
+                {% if notif.type == 'message' %}bg-blue-500/10
+                {% elif notif.type == 'comment' %}bg-emerald-500/10
+                {% elif notif.type == 'like' %}bg-pink-500/10
+                {% else %}bg-amber-500/10{% endif %}">
+                {% if notif.type == 'message' %}
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                </svg>
+                {% elif notif.type == 'comment' %}
+                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                </svg>
+                {% elif notif.type == 'like' %}
+                <svg class="w-5 h-5 text-pink-500" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                </svg>
+                {% else %}
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                </svg>
+                {% endif %}
+            </div>
+
+            <!-- Content -->
+            <div class="ml-4 flex-1 min-w-0">
+                <p class="text-sm {% if not notif.is_read %}text-gray-900 dark:text-slate-100 font-medium{% else %}text-gray-600 dark:text-slate-400{% endif %}">
+                    {{ notif.content }}
+                </p>
+                <p class="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{{ notif.created_at|timesince }} ago</p>
+            </div>
+
+            <!-- Unread dot -->
+            {% if not notif.is_read %}
+            <div class="flex-shrink-0 ml-3">
+                <div class="w-2.5 h-2.5 bg-primary-500 rounded-full"></div>
+            </div>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="flex justify-center mt-8 space-x-2">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}" class="px-4 py-2 btn-secondary text-sm">Previous</a>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <span class="px-4 py-2 bg-primary-500 text-white rounded-xl text-sm font-medium">{{ num }}</span>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <a href="?page={{ num }}" class="px-4 py-2 btn-secondary text-sm">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="px-4 py-2 btn-secondary text-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-16">
+        <svg class="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+        </svg>
+        <h3 class="text-lg font-medium text-gray-700 dark:text-slate-300">No notifications</h3>
+        <p class="text-gray-500 dark:text-slate-500 mt-1">You're all caught up!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
