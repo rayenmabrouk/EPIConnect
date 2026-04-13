@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}My Wallet — EPIConnect{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="flex justify-between items-center mb-8 animate-fade-in">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">My Wallet</h1>
+            <p class="text-gray-600 dark:text-slate-400 mt-1">Your EPI-points balance and history</p>
+        </div>
+        <a href="{% url 'wallet:perks' %}" class="btn-primary px-5 py-2.5 text-sm flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"></path>
+            </svg>
+            Redeem Perks
+        </a>
+    </div>
+
+    <!-- Balance Card -->
+    <div class="card p-8 mb-6 text-center bg-gradient-to-br from-primary-500 to-primary-700 border-0 text-white animate-fade-in">
+        <p class="text-primary-100 text-sm font-medium uppercase tracking-widest mb-2">Current Balance</p>
+        <div class="text-6xl font-extrabold mb-1">{{ wallet.balance }}</div>
+        <p class="text-primary-200 text-lg font-medium">EPI-points</p>
+    </div>
+
+    <!-- How to Earn -->
+    <div class="card p-6 mb-6">
+        <h2 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <svg class="w-5 h-5 mr-2 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+            How to Earn Points
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {% for action, pts, desc in earn_actions %}
+            <div class="bg-stone-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
+                <div class="text-xl font-bold text-primary-500">+{{ pts }}</div>
+                <div class="text-xs text-gray-600 dark:text-slate-400 mt-0.5">{{ desc }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Redemption History -->
+    {% if redemptions %}
+    <div class="card p-6 mb-6">
+        <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Recent Redemptions</h2>
+        <div class="space-y-3">
+            {% for r in redemptions %}
+            <div class="flex items-center justify-between py-2 border-b border-stone-100 dark:border-slate-700/50 last:border-0">
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">{{ r.perk.icon }}</span>
+                    <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-slate-100">{{ r.perk.title }}</p>
+                        <p class="text-xs text-gray-400 dark:text-slate-500">{{ r.redeemed_at|date:"M d, Y" }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-semibold text-primary-500">-{{ r.points_spent }} pts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full
+                        {% if r.status == 'claimed' %}bg-emerald-500/10 text-emerald-500{% else %}bg-amber-500/10 text-amber-500{% endif %}">
+                        {{ r.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Transaction History -->
+    <div class="card p-6">
+        <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Transaction History</h2>
+        {% if transactions %}
+        <div class="space-y-2">
+            {% for tx in transactions %}
+            <div class="flex items-center justify-between py-2.5 border-b border-stone-100 dark:border-slate-700/50 last:border-0">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
+                        {% if tx.type == 'earn' %}bg-emerald-500/10{% else %}bg-primary-500/10{% endif %}">
+                        {% if tx.type == 'earn' %}
+                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                        </svg>
+                        {% else %}
+                        <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                        </svg>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-800 dark:text-slate-200">{{ tx.description }}</p>
+                        <p class="text-xs text-gray-400 dark:text-slate-500">{{ tx.created_at|timesince }} ago</p>
+                    </div>
+                </div>
+                <span class="text-sm font-bold {% if tx.type == 'earn' %}text-emerald-500{% else %}text-primary-500{% endif %} flex-shrink-0 ml-4">
+                    {% if tx.type == 'earn' %}+{% else %}-{% endif %}{{ tx.amount }} pts
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-400 dark:text-slate-500 text-sm py-4 text-center">No transactions yet. Start earning points!</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

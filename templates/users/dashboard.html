@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — EPIConnect{% endblock %}
+
+{% block content %}
+<div class="mb-8 animate-fade-in">
+    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Welcome back, {{ user.first_name|default:user.username }}!</h1>
+    <p class="text-gray-600 dark:text-slate-400 mt-1">Here's your activity overview.</p>
+</div>
+
+{% if not user.profile.is_verified %}
+<div class="mb-6 flex items-start space-x-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 animate-fade-in">
+    <svg class="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+    </svg>
+    <div class="flex-1">
+        <p class="font-semibold text-amber-700 dark:text-amber-400 text-sm">Account Pending Verification</p>
+        <p class="text-amber-600 dark:text-amber-500 text-sm mt-0.5">
+            Your student ID <span class="font-mono font-medium">{{ user.profile.student_id|default:"(not set)" }}</span> is awaiting admin review. You can browse the platform, but posting items or listings requires verification.
+        </p>
+    </div>
+</div>
+{% else %}
+<div class="mb-6 flex items-center space-x-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 animate-fade-in">
+    <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+    </svg>
+    <p class="text-emerald-700 dark:text-emerald-400 text-sm font-medium">Verified Student — full access enabled</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-2">
+            <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+        </div>
+        <div class="text-sm text-gray-500 dark:text-slate-400">My Lost Items</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ user.lostfound_items.count }}</div>
+    </div>
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-2">
+            <div class="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+            </div>
+        </div>
+        <div class="text-sm text-gray-500 dark:text-slate-400">My Listings</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ user.listings.count }}</div>
+    </div>
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-2">
+            <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+            </div>
+        </div>
+        <div class="text-sm text-gray-500 dark:text-slate-400">My Posts</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ user.posts.count }}</div>
+    </div>
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-2">
+            <div class="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </div>
+        </div>
+        <div class="text-sm text-gray-500 dark:text-slate-400">Unread Messages</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{{ unread_messages_count }}</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card p-6 mb-6">
+    <h2 class="font-semibold text-gray-800 dark:text-slate-200 mb-4">Quick Actions</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <a href="{% url 'lostfound:create' %}" class="flex items-center p-4 rounded-xl border border-stone-200 dark:border-slate-700/50 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all duration-200">
+            <div class="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <div>
+                <div class="font-medium text-gray-800 dark:text-slate-200 text-sm">Report Item</div>
+                <div class="text-xs text-gray-500 dark:text-slate-500">Lost or found</div>
+            </div>
+        </a>
+        <a href="{% url 'marketplace:create' %}" class="flex items-center p-4 rounded-xl border border-stone-200 dark:border-slate-700/50 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all duration-200">
+            <div class="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            </div>
+            <div>
+                <div class="font-medium text-gray-800 dark:text-slate-200 text-sm">New Listing</div>
+                <div class="text-xs text-gray-500 dark:text-slate-500">Sell something</div>
+            </div>
+        </a>
+        <a href="{% url 'social:create' %}" class="flex items-center p-4 rounded-xl border border-stone-200 dark:border-slate-700/50 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all duration-200">
+            <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+            </div>
+            <div>
+                <div class="font-medium text-gray-800 dark:text-slate-200 text-sm">Ask for Help</div>
+                <div class="text-xs text-gray-500 dark:text-slate-500">Post on help wall</div>
+            </div>
+        </a>
+        <a href="{% url 'messaging:inbox' %}" class="flex items-center p-4 rounded-xl border border-stone-200 dark:border-slate-700/50 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all duration-200">
+            <div class="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </div>
+            <div>
+                <div class="font-medium text-gray-800 dark:text-slate-200 text-sm">Messages</div>
+                <div class="text-xs text-gray-500 dark:text-slate-500">Check inbox</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Profile Info -->
+<div class="card p-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="font-semibold text-gray-800 dark:text-slate-200">Profile</h2>
+        <a href="{% url 'users:profile_edit' %}" class="text-primary-500 text-sm hover:text-primary-400 font-medium">Edit</a>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div>
+            <span class="text-gray-500 dark:text-slate-500">Username:</span>
+            <span class="text-gray-800 dark:text-slate-200 ml-2">{{ user.username }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-slate-500">Email:</span>
+            <span class="text-gray-800 dark:text-slate-200 ml-2">{{ user.email }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-slate-500">Name:</span>
+            <span class="text-gray-800 dark:text-slate-200 ml-2">{{ user.get_full_name|default:"Not set" }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-slate-500">Student ID:</span>
+            <span class="text-gray-800 dark:text-slate-200 ml-2">{{ user.profile.student_id|default:"Not set" }}</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
