@@ -71,7 +71,7 @@ pipeline {
                       http://localhost)
                     echo "HTTP Status: $STATUS"
                     if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ] && [ "$STATUS" != "301" ]; then
-                        echo "Deployment FAILED — HTTP $STATUS"
+                        echo "Deployment FAILED - HTTP $STATUS"
                         exit 1
                     fi
                     echo "Deployment verified successfully!"
