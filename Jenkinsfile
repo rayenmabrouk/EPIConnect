@@ -1,21 +1,19 @@
-
 pipeline {
     agent any
 
     environment {
         PROJECT_DIR = '/var/www/EPIConnect'
         VENV_DIR    = '/var/www/EPIConnect/venv'
-        BRANCH      = 'main'
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Update Code') {
             steps {
-                echo 'Pulling latest code from GitHub...'
-                dir("${PROJECT_DIR}") {
-                    sh 'git pull origin ${BRANCH}'
-                }
+                echo 'Copying latest code to project directory...'
+                sh '''
+                    cp -r $WORKSPACE/. /var/www/EPIConnect/
+                '''
             }
         }
 
@@ -62,15 +60,15 @@ pipeline {
             }
         }
 
-        stage('Verify Deployment') {
+       stage('Verify Deployment') {
             steps {
                 echo 'Verifying deployment...'
                 sh 'sleep 5'
                 sh '''
-                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
+                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: epiconnect.swedencentral.cloudapp.azure.com" http://localhost)
                     echo "HTTP Status: $STATUS"
-                    if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
-                        echo "Deployment verification FAILED — HTTP $STATUS"
+                    if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ] && [ "$STATUS" != "301" ]; then
+                        echo "Deployment FAILED — HTTP $STATUS"
                         exit 1
                     fi
                     echo "Deployment verified successfully!"
@@ -92,4 +90,3 @@ pipeline {
         }
     }
 }
-
