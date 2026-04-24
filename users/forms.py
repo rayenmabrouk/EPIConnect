@@ -62,7 +62,12 @@ class StudentProfileForm(forms.ModelForm):
         widgets = {
             'bio': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Tell us about yourself...'}),
         }
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs['class'] = TAILWIND_INPUT
+        self.fields['profile_picture'].widget = forms.FileInput(attrs={'class': TAILWIND_INPUT})
+        self.fields['student_id'].required = False
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():

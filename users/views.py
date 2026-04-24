@@ -24,9 +24,10 @@ class RegisterView(View):
         if form.is_valid():
             user = form.save()
             StudentProfile.objects.get_or_create(
-                user=user,
-                defaults={'student_id': form.cleaned_data['student_id']},
-            )
+    user=user,
+    defaults={'student_id': form.cleaned_data['student_id']},
+)
+
             return redirect('users:login')
         return render(request, 'users/register.html', {'form': form})
 
