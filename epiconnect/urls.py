@@ -13,9 +13,7 @@ urlpatterns = [
     path('messaging/', include('messaging.urls')),
     path('notifications/', include('notifications.urls')),
     path('wallet/', include('wallet.urls')),
+    path('security/', include('auditlog.urls')),
 ]
 
-# Serve user-uploaded media files.
-# Django/gunicorn handles this directly on Azure App Service, which is fine
-# for a low-traffic deployment. For high traffic, switch to Azure Blob Storage.
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
