@@ -6,12 +6,15 @@ from django.views import View
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from .forms import UserRegistrationForm, UserUpdateForm, StudentProfileForm, CustomAuthenticationForm
 from .models import User, StudentProfile
+from auditlog.utils import log_action
 
 
+@method_decorator(ratelimit(key='header:x-forwarded-for', rate='5/m', method='POST', block=True), name='post')
 class RegisterView(View):
     def get(self, request):
         if request.user.is_authenticated:
@@ -23,14 +26,23 @@ class RegisterView(View):
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
+<<<<<<< Updated upstream
             StudentProfile.objects.get_or_create(
                 user=user,
                 defaults={'student_id': form.cleaned_data['student_id']},
             )
+=======
+            profile, created = StudentProfile.objects.get_or_create(user=user)
+            if created or not profile.student_id:
+                profile.student_id = form.cleaned_data['student_id']
+                profile.save()
+            log_action(request, 'register', user=user, details=f'New account: {user.username}')
+>>>>>>> Stashed changes
             return redirect('users:login')
         return render(request, 'users/register.html', {'form': form})
 
 
+@method_decorator(ratelimit(key='header:x-forwarded-for', rate='10/m', method='POST', block=True), name='post')
 class CustomLoginView(LoginView):
     template_name = 'users/login.html'
     redirect_authenticated_user = True
@@ -78,6 +90,7 @@ class ProfileUpdateView(LoginRequiredMixin, View):
         if user_form.is_valid() and profile_form.is_valid():
             user_form.save()
             profile_form.save()
+            log_action(request, 'profile_update', details=f'Profile updated: {request.user.username}')
             messages.success(request, 'Profile updated successfully!')
             return redirect('users:dashboard')
         return render(request, 'users/profile_edit.html', {
@@ -94,5 +107,6 @@ def remove_profile_picture(request):
         profile.profile_picture.delete(save=False)
         profile.profile_picture = None
         profile.save()
+        log_action(request, 'profile_update', details='Profile picture removed')
         messages.success(request, 'Profile picture removed.')
     return redirect('users:profile_edit')
