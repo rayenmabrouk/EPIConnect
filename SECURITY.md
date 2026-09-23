@@ -1,17 +1,14 @@
 # Security Policy — EPIConnect
 
-## Application Security
-- django-axes: account lockout after 5 failed attempts
-- django-ratelimit: rate limiting on login and register
-- Audit logging: all critical actions logged
-- Security dashboard at /security/dashboard/ (superuser only)
-- Strong password validation
-- Bandit scan: 0 issues in 2247 lines of code
-- pip-audit: 0 exploitable vulnerabilities
+The full description of the security measures, the threat model and the scan results is in **[docs/SECURITY.md](docs/SECURITY.md)**.
 
-## Infrastructure Security
-- NSG: Grafana, Jenkins, Prometheus restricted to admin IP
-- Microsoft Defender for Cloud: enabled
-- Azure Backup: daily automated VM backup
-- SSL: Let's Encrypt with auto-renewal
-- Security headers: Grade A on securityheaders.com
+## Summary
+- django-axes: lockout after 5 failed logins (per username / real client IP), 1 h cool-off
+- django-ratelimit on register, login, posts and comments
+- Custom audit log + superuser security dashboard (`/security/dashboard/`)
+- Strong password validation, secure cookies, CSRF, HSTS, CSP — securityheaders.com grade A
+- Bandit: 0 issues · pip-audit: 0 known CVEs (enforced in the Jenkins pipeline)
+- NSG port lockdown managed by Terraform; Microsoft Defender for Cloud; daily backups
+
+## Reporting a vulnerability
+Please email **rayenmabrouk9@gmail.com** instead of opening a public issue.
