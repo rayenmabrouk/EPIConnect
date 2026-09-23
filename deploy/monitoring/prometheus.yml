@@ -1,0 +1,22 @@
+# /etc/prometheus/prometheus.yml
+# Prometheus 2.52 listens on :9090 (NSG: admin IP only).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Host metrics — Grafana dashboard #1860 "Node Exporter Full"
+  - job_name: node
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Application metrics from django-prometheus — Grafana dashboard #17658 "Django"
+  # Scraped directly from Gunicorn on loopback (Nginx denies /metrics).
+  - job_name: django
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['127.0.0.1:8000']
