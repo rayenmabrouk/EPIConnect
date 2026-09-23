@@ -1,7 +1,9 @@
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+
+from core.views import healthz, metrics
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,6 +16,10 @@ urlpatterns = [
     path('notifications/', include('notifications.urls')),
     path('wallet/', include('wallet.urls')),
     path('security/', include('auditlog.urls')),
+    # Ops endpoints
+    path('healthz/', healthz, name='healthz'),
+    path('metrics', metrics, name='prometheus-django-metrics'),
 ]
 
+# Only active when DEBUG=True; in production Nginx serves /media/ directly.
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

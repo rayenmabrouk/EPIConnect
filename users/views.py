@@ -14,7 +14,7 @@ from .models import User, StudentProfile
 from auditlog.utils import log_action
 
 
-@method_decorator(ratelimit(key='header:x-forwarded-for', rate='5/m', method='POST', block=True), name='post')
+@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='post')
 class RegisterView(View):
     def get(self, request):
         if request.user.is_authenticated:
@@ -26,23 +26,17 @@ class RegisterView(View):
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
-<<<<<<< Updated upstream
-            StudentProfile.objects.get_or_create(
-                user=user,
-                defaults={'student_id': form.cleaned_data['student_id']},
-            )
-=======
             profile, created = StudentProfile.objects.get_or_create(user=user)
             if created or not profile.student_id:
                 profile.student_id = form.cleaned_data['student_id']
-                profile.save()
+                profile.save(update_fields=['student_id'])
             log_action(request, 'register', user=user, details=f'New account: {user.username}')
->>>>>>> Stashed changes
+            messages.success(request, 'Account created. Log in to continue — an admin will verify your student ID.')
             return redirect('users:login')
         return render(request, 'users/register.html', {'form': form})
 
 
-@method_decorator(ratelimit(key='header:x-forwarded-for', rate='10/m', method='POST', block=True), name='post')
+@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='post')
 class CustomLoginView(LoginView):
     template_name = 'users/login.html'
     redirect_authenticated_user = True
