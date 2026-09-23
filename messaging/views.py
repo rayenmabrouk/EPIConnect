@@ -6,8 +6,27 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView
 
+from django import forms
+
 from .models import Conversation, Message
 from users.models import User
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+class MessageImageForm(forms.Form):
+    """Validates chat uploads with Pillow so only real images are stored.
+
+    Without this, any file (HTML, SVG, scripts...) could be uploaded and then
+    served from /media/, which is a stored-XSS vector.
+    """
+    image = forms.ImageField(required=False)
+
+    def clean_image(self):
+        image = self.cleaned_data.get('image')
+        if image and image.size > MAX_IMAGE_BYTES:
+            raise forms.ValidationError('Image too large (max 5 MB).')
+        return image
 
 
 class InboxView(LoginRequiredMixin, ListView):
@@ -99,8 +118,11 @@ class SendMessageView(LoginRequiredMixin, View):
         if not conversation.participants.filter(pk=request.user.pk).exists():
             return JsonResponse({'error': 'Forbidden'}, status=403)
 
-        content = request.POST.get('content', '').strip()
-        image = request.FILES.get('image')
+        content = request.POST.get('content', '').strip()[:5000]
+        image_form = MessageImageForm(files=request.FILES)
+        if not image_form.is_valid():
+            return JsonResponse({'error': image_form.errors['image'][0]}, status=400)
+        image = image_form.cleaned_data.get('image')
 
         if not content and not image:
             return JsonResponse({'error': 'Empty message'}, status=400)

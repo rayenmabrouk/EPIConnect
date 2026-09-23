@@ -240,6 +240,7 @@
         .then(res => res.json())
         .then(data => {
             if (!data.error) appendMessage(data);
+            else input.placeholder = data.error;
         })
         .finally(() => {
             sendBtn.disabled = false;

@@ -32,7 +32,7 @@ class UserRegistrationForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['password1'].help_text = 'At least 6 characters.'
+        self.fields['password1'].help_text = 'At least 8 characters, not too common, not entirely numeric.'
         self.fields['password2'].help_text = ''
         for field in self.fields.values():
             field.widget.attrs['class'] = TAILWIND_INPUT

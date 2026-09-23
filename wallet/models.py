@@ -20,10 +20,19 @@ class Transaction(models.Model):
     type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     amount = models.PositiveIntegerField()
     description = models.CharField(max_length=200)
+    # Idempotency key for one-off rewards (e.g. "like:<post>:<liker>") so that
+    # toggling a like or flipping an item status cannot farm points.
+    reference = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['wallet', 'reference'],
+                name='unique_wallet_reference',
+            ),
+        ]
 
     def __str__(self):
         sign = '+' if self.type == self.EARN else '-'

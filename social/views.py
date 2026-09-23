@@ -12,6 +12,9 @@ from django.contrib import messages as django_messages
 from .models import Post, Comment, Like
 from .forms import PostForm, CommentForm
 from notifications.models import Notification
+from auditlog.utils import log_action
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 
 
 class FeedView(ListView):
@@ -34,6 +37,7 @@ class FeedView(ListView):
         return qs.order_by('-created_at')
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='10/m', method='POST', block=True), name='post')
 class PostCreateView(VerifiedStudentMixin, CreateView):
     model = Post
     form_class = PostForm
@@ -43,6 +47,7 @@ class PostCreateView(VerifiedStudentMixin, CreateView):
         post = form.save(commit=False)
         post.author = self.request.user
         post.save()
+        log_action(self.request, 'post_create', details=f'Post #{post.pk}')
         from wallet.utils import award_points, award_badge
         award_points(self.request.user, 1, 'Published a Help Wall post')
         # First post badge
@@ -74,7 +79,8 @@ class PostDetailView(View):
         })
 
 
-class CommentCreateView(LoginRequiredMixin, View):
+@method_decorator(ratelimit(key='user_or_ip', rate='20/m', method='POST', block=True), name='post')
+class CommentCreateView(VerifiedStudentMixin, View):
     def post(self, request, pk):
         post = get_object_or_404(Post, pk=pk)
         form = CommentForm(request.POST)
@@ -114,6 +120,7 @@ class PostDeleteView(LoginRequiredMixin, View):
         post = get_object_or_404(Post, pk=pk)
         if request.user != post.author:
             raise PermissionDenied
+        log_action(request, 'post_delete', details=f'Post #{post.pk}')
         post.delete()
         django_messages.success(request, 'Post deleted.')
         return redirect(reverse('social:feed'))
@@ -144,14 +151,21 @@ class LikeToggleView(LoginRequiredMixin, View):
             liked = True
             # Notify post author on like (not on unlike)
             if post.author != request.user:
-                Notification.objects.create(
-                    user=post.author,
-                    type='like',
-                    content=f"{request.user.username} liked your post",
-                    link=f"/social/{post.pk}/",
-                )
                 from wallet.utils import award_points, award_badge
-                award_points(post.author, 2, f'{request.user.username} liked your post')
+                # Only the first like from a given user ever earns points (and
+                # notifies), so like/unlike toggling cannot farm EPI-points or
+                # spam the author's notifications.
+                first_like = award_points(
+                    post.author, 2, f'{request.user.username} liked your post',
+                    reference=f'like:{post.pk}:{request.user.pk}',
+                )
+                if first_like:
+                    Notification.objects.create(
+                        user=post.author,
+                        type='like',
+                        content=f"{request.user.username} liked your post",
+                        link=f"/social/{post.pk}/",
+                    )
                 # Top tutor badge: 10+ total likes on own posts
                 total_likes = Like.objects.filter(post__author=post.author).count()
                 if total_likes >= 10:
