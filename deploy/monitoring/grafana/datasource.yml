@@ -1,0 +1,12 @@
+# /etc/grafana/provisioning/datasources/prometheus.yml
+# Declarative datasource provisioning — replaces the old Python/API workaround
+# used to inject the datasource. Restart grafana-server after copying.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090
+    isDefault: true
+    editable: false

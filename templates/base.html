@@ -354,6 +354,11 @@
     (function() {
         const notifList = document.getElementById('notification-list');
         if (!notifList) return;
+        // Notification text contains user-supplied data (item titles, usernames):
+        // escape it before building HTML to prevent stored XSS.
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         function loadNotifications() {
             fetch('/notifications/dropdown/').then(r => r.json()).then(data => {
                 if (!data.notifications || !data.notifications.length) {
@@ -370,9 +375,9 @@
                 data.notifications.forEach(n => {
                     const t = icons[n.type] || icons.alert;
                     const fill = n.type === 'like' ? 'currentColor' : 'none';
-                    h += `<a href="${n.link}" class="flex items-center p-3.5 hover:bg-stone-100 dark:hover:bg-slate-700/50 ${!n.is_read ? 'bg-primary-50/50 dark:bg-primary-500/5' : ''}">
+                    h += `<a href="${esc(n.link)}" class="flex items-center p-3.5 hover:bg-stone-100 dark:hover:bg-slate-700/50 ${!n.is_read ? 'bg-primary-50/50 dark:bg-primary-500/5' : ''}">
                         <div class="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${t.bg}"><svg class="w-4.5 h-4.5 ${t.color}" fill="${fill}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${t.path}"></path></svg></div>
-                        <div class="ml-3 flex-1 min-w-0"><p class="text-sm ${!n.is_read ? 'text-gray-900 dark:text-slate-100 font-medium' : 'text-gray-500 dark:text-slate-400'} truncate">${n.content}</p><p class="text-xs text-gray-400 dark:text-slate-500 mt-0.5">${n.time}</p></div>
+                        <div class="ml-3 flex-1 min-w-0"><p class="text-sm ${!n.is_read ? 'text-gray-900 dark:text-slate-100 font-medium' : 'text-gray-500 dark:text-slate-400'} truncate">${esc(n.content)}</p><p class="text-xs text-gray-400 dark:text-slate-500 mt-0.5">${esc(n.time)}</p></div>
                         ${!n.is_read ? '<div class="w-2 h-2 bg-primary-500 rounded-full flex-shrink-0 ml-2"></div>' : ''}
                     </a>`;
                 });

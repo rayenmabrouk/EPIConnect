@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import ListView
 
@@ -22,8 +23,11 @@ class NotificationReadView(LoginRequiredMixin, View):
     def get(self, request, pk):
         notification = get_object_or_404(Notification, pk=pk, user=request.user)
         notification.is_read = True
-        notification.save()
-        if notification.link:
+        notification.save(update_fields=['is_read'])
+        # Only follow internal links (defence against open redirects).
+        if notification.link and url_has_allowed_host_and_scheme(
+            notification.link, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
             return redirect(notification.link)
         return redirect('notifications:list')
 

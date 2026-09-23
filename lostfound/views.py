@@ -8,6 +8,7 @@ from django.views import View
 from django.views.generic import ListView, DetailView, CreateView
 from django.contrib import messages
 
+from auditlog.utils import log_action
 from .models import Item, ItemHistory
 from .forms import ItemForm, ItemFilterForm
 
@@ -76,6 +77,7 @@ class ItemCreateView(VerifiedStudentMixin, CreateView):
             item.owner = self.request.user
 
         item.save()
+        log_action(self.request, 'item_create', details=f'Item #{item.pk}: {item.title}')
 
         ItemHistory.objects.create(
             item=item,
@@ -96,6 +98,7 @@ class ItemDeleteView(LoginRequiredMixin, View):
         item = get_object_or_404(Item, pk=pk)
         if request.user != item.owner and request.user != item.finder:
             raise PermissionDenied
+        log_action(request, 'item_delete', details=f'Item #{item.pk}: {item.title}')
         item.delete()
         messages.success(request, 'Item deleted.')
         return redirect(reverse('lostfound:list'))
@@ -123,7 +126,8 @@ class ItemStatusUpdateView(LoginRequiredMixin, View):
 
         old_status = item.get_status_display()
         item.status = new_status
-        item.save()
+        item.save(update_fields=['status', 'updated_at'])
+        log_action(request, 'item_update', details=f'Item #{item.pk}: {old_status} -> {item.get_status_display()}')
 
         ItemHistory.objects.create(
             item=item,
@@ -149,11 +153,15 @@ class ItemStatusUpdateView(LoginRequiredMixin, View):
 
         # Award points and badges for resolving an item
         from wallet.utils import award_points, award_badge
+        # One award per item per status: flipping lost -> found -> lost -> found
+        # repeatedly must not farm points.
         if new_status == 'claimed':
-            award_points(request.user, 15, f'Item "{item.title}" marked as claimed')
+            award_points(request.user, 15, f'Item "{item.title}" marked as claimed',
+                         reference=f'item:{item.pk}:claimed')
             award_badge(request.user, 'good_samaritan')
         elif new_status == 'found':
-            award_points(request.user, 10, f'Item "{item.title}" marked as found')
+            award_points(request.user, 10, f'Item "{item.title}" marked as found',
+                         reference=f'item:{item.pk}:found')
             award_badge(request.user, 'good_samaritan')
 
         messages.success(request, f"Item marked as {item.get_status_display()}.")
