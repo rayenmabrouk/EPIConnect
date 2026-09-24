@@ -7,4 +7,4 @@ class AuditlogConfig(AppConfig):
     verbose_name = 'Audit Logs'
 
     def ready(self):
-        import auditlog.signals
+        import auditlog.signals  # noqa: F401  (connects the signal receivers)

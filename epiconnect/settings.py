@@ -1,18 +1,46 @@
+"""EPIConnect settings.
+
+All deployment-specific values come from environment variables so the same
+container image runs locally (docker compose) and on AWS (ECS Fargate).
+See .env.example for the full list.
+"""
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+from django.utils.csp import CSP
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-try:
+try:  # optional: local development convenience only
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR / '.env')
-except ImportError:
+except ImportError:  # pragma: no cover
     pass
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-local-dev-only-do-not-use-in-production')
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
-CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+
+def env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def env_list(name, default=''):
+    return [v.strip() for v in os.environ.get(name, default).split(',') if v.strip()]
+
+
+# --------------------------------------------------------------------------
+# Core
+# --------------------------------------------------------------------------
+DEBUG = env_bool('DEBUG', False)
+
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('SECRET_KEY must be set when DEBUG is off.')
+    # Only reachable with DEBUG on (local development)
+    SECRET_KEY = 'django-insecure-local-development-only'  # nosec B105
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -21,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'storages',
     'users',
     'core',
     'lostfound',
@@ -34,7 +63,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.HealthCheckMiddleware',
+    'core.middleware.TrustedProxyMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -43,9 +75,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'django_ratelimit.middleware.RatelimitMiddleware',
 ]
 
 ROOT_URLCONF = 'epiconnect.urls'
+WSGI_APPLICATION = 'epiconnect.wsgi.application'
 
 TEMPLATES = [
     {
@@ -55,6 +89,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
+                'django.template.context_processors.csp',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'notifications.context_processors.unread_notifications_count',
@@ -65,60 +100,187 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'epiconnect.wsgi.application'
-
-_DATABASE_URL = os.environ.get('DATABASE_URL')
-if _DATABASE_URL:
+# --------------------------------------------------------------------------
+# Database
+# DATABASE_URL (local / compose) or discrete DB_* variables (ECS injects the
+# password as its own secret, so it never appears inside a URL string).
+# --------------------------------------------------------------------------
+if os.environ.get('DATABASE_URL'):
     import dj_database_url
-    DATABASES = {'default': dj_database_url.parse(_DATABASE_URL, conn_max_age=600)}
+    DATABASES = {'default': dj_database_url.parse(os.environ['DATABASE_URL'], conn_max_age=60)}
+elif os.environ.get('DB_HOST'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'HOST': os.environ['DB_HOST'],
+            'PORT': os.environ.get('DB_PORT', '5432'),
+            'NAME': os.environ.get('DB_NAME', 'epiconnect'),
+            'USER': os.environ.get('DB_USER', 'epiconnect'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
+            'OPTIONS': {'sslmode': os.environ.get('DB_SSLMODE', 'require')},
+        }
+    }
 else:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
 
+AUTH_USER_MODEL = 'users.User'
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+LOGIN_URL = 'users:login'
+LOGIN_REDIRECT_URL = 'core:home'
+LOGOUT_REDIRECT_URL = 'core:home'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
+# --------------------------------------------------------------------------
+# Static files (WhiteNoise, baked into the image) and media (S3 on AWS)
+# --------------------------------------------------------------------------
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+_static_backend = (
+    'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    if env_bool('STATIC_MANIFEST', True)
+    else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+)
 STORAGES = {
-    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+    'staticfiles': {'BACKEND': _static_backend},
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
 }
-
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+SERVE_MEDIA = env_bool('SERVE_MEDIA', DEBUG)  # local only; on AWS media is served by CloudFront from S3
 
-AUTH_USER_MODEL = 'users.User'
-LOGIN_URL = 'users:login'
-LOGIN_REDIRECT_URL = 'core:home'
-LOGOUT_REDIRECT_URL = 'core:home'
+AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', '')
+if AWS_STORAGE_BUCKET_NAME:
+    MEDIA_DOMAIN = os.environ['MEDIA_DOMAIN']  # the CloudFront domain that fronts the bucket
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': AWS_STORAGE_BUCKET_NAME,
+            'region_name': os.environ.get('AWS_REGION', 'us-east-1'),
+            'location': 'media',
+            'custom_domain': MEDIA_DOMAIN,
+            'querystring_auth': False,  # objects are private; CloudFront reads them via OAC
+            'file_overwrite': False,
+            'default_acl': None,
+            'object_parameters': {'CacheControl': 'public, max-age=86400'},
+        },
+    }
+    MEDIA_URL = f'https://{MEDIA_DOMAIN}/media/'
 
-AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesStandaloneBackend',
-    'django.contrib.auth.backends.ModelBackend',
-]
+MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE_MB', '5')) * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# --------------------------------------------------------------------------
+# Security
+# --------------------------------------------------------------------------
+# Number of reverse proxies in front of the app that append to X-Forwarded-For
+# (CloudFront + ALB on AWS = 2, none locally = 0). See core/middleware.py.
+TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', '0'))
 
+# CloudFront talks to the ALB over HTTP inside AWS, so the ALB's own
+# X-Forwarded-Proto says "http". CloudFront-Forwarded-Proto carries what the
+# browser actually used. The header is trustworthy only because the ALB rejects
+# requests that did not come through CloudFront.
+_proxy_ssl_header = os.environ.get('SECURE_PROXY_SSL_HEADER', '')
+if _proxy_ssl_header:
+    SECURE_PROXY_SSL_HEADER = (_proxy_ssl_header, 'https')
 
-if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', not DEBUG)
+SESSION_COOKIE_SECURE = env_bool('SECURE_COOKIES', not DEBUG)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False  # we do not own the parent domain (cloudfront.net)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
 
+# Nonce-based Content Security Policy (Django 6 built-in). No third-party
+# script is loaded at runtime: Tailwind is compiled at image build time.
+SECURE_CSP = {
+    'default-src': [CSP.SELF],
+    'script-src': [CSP.SELF, CSP.NONCE],
+    'style-src': [CSP.SELF, CSP.UNSAFE_INLINE],  # templates use style="" attributes
+    'img-src': [CSP.SELF, 'data:', 'blob:'],
+    'font-src': [CSP.SELF],
+    'connect-src': [CSP.SELF],
+    'object-src': [CSP.NONE],
+    'base-uri': [CSP.SELF],
+    'form-action': [CSP.SELF],
+    'frame-ancestors': [CSP.NONE],
+}
+if AWS_STORAGE_BUCKET_NAME:
+    SECURE_CSP['img-src'].append(f'https://{MEDIA_DOMAIN}')
+
+ADMIN_URL = os.environ.get('ADMIN_URL', 'admin/')
+
+# django-axes: brute-force protection (lock username+IP after 5 failures for 1h)
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1
 AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
 AXES_RESET_ON_SUCCESS = True
 AXES_ENABLE_ADMIN = True
 AXES_LOCKOUT_TEMPLATE = 'security/lockout.html'
+AXES_IPWARE_META_PRECEDENCE_ORDER = ('REMOTE_ADDR',)  # already resolved by TrustedProxyMiddleware
+
+# Rate-limit counters must be shared by every Gunicorn worker and every ECS
+# task, so they live in PostgreSQL (DatabaseCache) rather than per-process
+# memory. DB increments are not atomic: under a burst a few extra requests can
+# slip through, which is acceptable here and avoids paying for ElastiCache.
+# A production deployment with real traffic would use Redis/Valkey.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache',
+    }
+}
+SILENCED_SYSTEM_CHECKS = [
+    'django_ratelimit.E003', 'django_ratelimit.W001',
+    # HSTS includeSubDomains/preload are deliberately off: the app is served on a
+    # cloudfront.net subdomain and we do not control the parent domain.
+    'security.W005', 'security.W021',
+]
+RATELIMIT_VIEW = 'core.views.ratelimited'  # HTTP 429 instead of a generic 403
+
+# --------------------------------------------------------------------------
+# Logging: JSON lines on stdout -> CloudWatch Logs (awslogs driver)
+# --------------------------------------------------------------------------
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'json': {'()': 'core.logging.JsonFormatter'},
+        'plain': {'format': '%(levelname)s %(name)s %(message)s'},
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'json' if env_bool('LOG_JSON', not DEBUG) else 'plain',
+        },
+    },
+    'root': {'handlers': ['console'], 'level': os.environ.get('LOG_LEVEL', 'INFO')},
+    'loggers': {
+        'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'axes': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'epiconnect.audit': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
+}

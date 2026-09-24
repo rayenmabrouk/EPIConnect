@@ -1,13 +1,19 @@
-from django.shortcuts import render, redirect
-from django.utils import timezone
 from datetime import timedelta
-from .models import AuditLog
+
 from axes.models import AccessAttempt
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.db.models import Count
+from django.shortcuts import render
+from django.utils import timezone
+
+from .models import AuditLog
 
 
+@login_required
 def security_dashboard(request):
-    if not request.user.is_authenticated or not request.user.is_superuser:
-        return redirect('users:login')
+    if not request.user.is_superuser:
+        raise PermissionDenied
 
     now = timezone.now()
     last_24h = now - timedelta(hours=24)
@@ -22,9 +28,12 @@ def security_dashboard(request):
 
     access_attempts = AccessAttempt.objects.order_by('-attempt_time')[:20]
 
-    actions = {}
-    for log in AuditLog.objects.filter(timestamp__gte=last_7d):
-        actions[log.action] = actions.get(log.action, 0) + 1
+    actions = dict(
+        AuditLog.objects.filter(timestamp__gte=last_7d)
+        .values_list('action')
+        .annotate(n=Count('id'))
+        .values_list('action', 'n')
+    )
 
     return render(request, 'auditlog/dashboard.html', {
         'recent_logs': recent_logs,

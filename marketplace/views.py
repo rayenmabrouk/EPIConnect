@@ -7,7 +7,10 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView
 from django.contrib import messages
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 
+from auditlog.utils import log_action
 from .models import Listing
 from .forms import ListingForm, ListingFilterForm
 
@@ -59,11 +62,13 @@ class ListingDeleteView(LoginRequiredMixin, View):
         listing = get_object_or_404(Listing, pk=pk)
         if request.user != listing.seller:
             raise PermissionDenied
+        log_action(request, 'listing_delete', details=f'Listing #{listing.pk}: {listing.title}')
         listing.delete()
         messages.success(request, 'Listing deleted.')
         return redirect(reverse('marketplace:list'))
 
 
+@method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True), name='post')
 class ListingCreateView(VerifiedStudentMixin, CreateView):
     model = Listing
     form_class = ListingForm
@@ -73,6 +78,7 @@ class ListingCreateView(VerifiedStudentMixin, CreateView):
         listing = form.save(commit=False)
         listing.seller = self.request.user
         listing.save()
+        log_action(self.request, 'listing_create', details=f'Listing #{listing.pk}: {listing.title}')
         from wallet.utils import award_badge
         if Listing.objects.filter(seller=self.request.user).count() >= 3:
             award_badge(self.request.user, 'trustworthy_seller')

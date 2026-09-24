@@ -1,4 +1,19 @@
+from django.http import HttpResponse, HttpResponsePermanentRedirect, JsonResponse
+from django.templatetags.static import static
 from django.views.generic import TemplateView
+
+
+def ratelimited(request, exception=None):
+    """Returned by django-ratelimit (RatelimitMiddleware) when a limit is hit."""
+    message = 'Too many requests. Please slow down and try again in a minute.'
+    if request.headers.get('X-CSRFToken') or request.headers.get('Accept', '').startswith('application/json'):
+        return JsonResponse({'error': message}, status=429)
+    return HttpResponse(message, status=429, content_type='text/plain')
+
+
+def favicon(request):
+    """Browsers request /favicon.ico on every page (including the admin)."""
+    return HttpResponsePermanentRedirect(static('favicon.svg'))
 
 
 class HomeView(TemplateView):

@@ -1,0 +1,6 @@
+# Development / CI tooling (never installed in the runtime image)
+-c requirements.txt
+coverage==7.16.1
+ruff==0.16.8
+bandit==1.9.4
+pip-audit==2.10.1

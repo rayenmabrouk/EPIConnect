@@ -20,7 +20,7 @@ class ListingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for name, field in self.fields.items():
+        for field in self.fields.values():
             if 'class' not in field.widget.attrs:
                 field.widget.attrs['class'] = TAILWIND_INPUT
 
