@@ -35,4 +35,12 @@ provider "aws" {
   }
 }
 
+# Same account/region without default tags: used for CloudFront, because
+# creating a tagged distribution also needs cloudfront:TagResource, which the
+# AWS Academy role may not have.
+provider "aws" {
+  alias  = "untagged"
+  region = var.aws_region
+}
+
 data "aws_caller_identity" "current" {}

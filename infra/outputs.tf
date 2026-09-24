@@ -20,7 +20,7 @@ output "db_endpoint" {
 }
 
 output "media_bucket" {
-  value = aws_s3_bucket.media.bucket
+  value = local.media_bucket
 }
 
 output "app_secret_name" {

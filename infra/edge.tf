@@ -1,10 +1,10 @@
 # ---------------------------------------------------------------------------
 # Request path:  browser --HTTPS--> CloudFront --HTTP--> ALB --> Fargate task
-#                                   CloudFront --OAC---> S3 (/media/*)
+#                browser --HTTPS--> S3 (uploads, pre-signed URLs from Django)
 #
 # CloudFront provides HTTPS on its default *.cloudfront.net certificate (no
-# domain needed), caches /static/ and /media/, and serves uploads straight
-# from S3. The ALB is only reachable from CloudFront: its security group
+# domain needed) and caches /static/. The ALB is only reachable from
+# CloudFront: its security group
 # admits the CloudFront origin-facing prefix list, and its listener forwards
 # only requests carrying a secret header that CloudFront adds.
 # ---------------------------------------------------------------------------
@@ -92,19 +92,11 @@ locals {
     caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
     # Managed-AllViewerAndCloudFrontHeaders-2022-06
     all_viewer_and_cf = "33f36d7e-f396-46d9-90e0-52428a34d9dc"
-    # Managed-SecurityHeadersPolicy
-    security_headers = "67f7725c-6f97-4210-82d7-5512b31e9d03"
   }
 }
 
-resource "aws_cloudfront_origin_access_control" "media" {
-  name                              = "${var.project}-media"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
 resource "aws_cloudfront_distribution" "main" {
+  provider = aws.untagged
   #checkov:skip=CKV_AWS_174:Default *.cloudfront.net certificate; a minimum TLS version can only be set with a custom certificate
   #checkov:skip=CKV2_AWS_42:No custom domain in this project; production would use Route 53 + ACM
   #checkov:skip=CKV_AWS_68:WAF is a paid add-on; listed as the first production improvement
@@ -113,9 +105,9 @@ resource "aws_cloudfront_distribution" "main" {
   #checkov:skip=CKV_AWS_374:Campus application, no geographic restriction required
   #checkov:skip=CKV_AWS_310:Single origin region by design; failover is out of scope for the demo
   #checkov:skip=CKV_AWS_305:Dynamic application; "/" is served by Django, no root object
-  #checkov:skip=CKV2_AWS_32:Managed security-headers policy is attached to /media/* (Checkov cannot resolve the ID local); Django sets them on app responses
+  #checkov:skip=CKV2_AWS_32:Security headers are set by Django on every response (CSP nonce must be per request)
   enabled         = true
-  comment         = "${var.project} - app + media"
+  comment         = var.project
   is_ipv6_enabled = true
   http_version    = "http2and3"
   price_class     = "PriceClass_100" # North America + Europe edges: cheapest
@@ -134,12 +126,6 @@ resource "aws_cloudfront_distribution" "main" {
       name  = "X-Origin-Verify"
       value = random_password.origin_verify.result
     }
-  }
-
-  origin {
-    origin_id                = "media"
-    domain_name              = aws_s3_bucket.media.bucket_regional_domain_name
-    origin_access_control_id = aws_cloudfront_origin_access_control.media.id
   }
 
   default_cache_behavior {
@@ -163,17 +149,6 @@ resource "aws_cloudfront_distribution" "main" {
     cache_policy_id          = local.cf_policy.caching_optimized
     origin_request_policy_id = local.cf_policy.all_viewer_and_cf
     compress                 = true
-  }
-
-  ordered_cache_behavior {
-    path_pattern               = "/media/*"
-    target_origin_id           = "media"
-    viewer_protocol_policy     = "redirect-to-https"
-    allowed_methods            = ["GET", "HEAD"]
-    cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = local.cf_policy.caching_optimized
-    response_headers_policy_id = local.cf_policy.security_headers
-    compress                   = true
   }
 
   restrictions {

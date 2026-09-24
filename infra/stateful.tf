@@ -125,87 +125,24 @@ resource "aws_ecr_lifecycle_policy" "app" {
 
 # ---------------------------------------------------------------------------
 # User uploads (profile pictures, item / listing / chat photos)
-# Private bucket; only CloudFront (Origin Access Control) can read it and only
-# the application can write to it.
+#
+# The bucket itself is created and hardened by scripts/bootstrap-buckets.sh
+# (private, public access blocked, SSE-S3, TLS-only policy), not by Terraform:
+# the AWS provider reads the bucket's Object Lock configuration on every
+# plan, and an AWS Academy service control policy denies that call.
+# The app writes objects with its task role and serves them to browsers
+# through short-lived pre-signed URLs (the bucket is never public).
 # ---------------------------------------------------------------------------
-resource "aws_s3_bucket" "media" {
-  #checkov:skip=CKV_AWS_18:Server access logging not needed for a demo; CloudFront is the only reader
-  #checkov:skip=CKV2_AWS_62:No event-driven processing of uploads
-  #checkov:skip=CKV_AWS_144:Single-region demo; versioning protects against deletion
-  #checkov:skip=CKV_AWS_145:SSE-S3 with bucket key is enabled; KMS adds per-request cost
-  bucket        = "${var.project}-media-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true
+locals {
+  media_bucket     = "${var.project}-media-${data.aws_caller_identity.current.account_id}"
+  media_bucket_arn = "arn:aws:s3:::${local.media_bucket}"
 }
 
-resource "aws_s3_bucket_public_access_block" "media" {
-  bucket                  = aws_s3_bucket.media.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
+# The first apply created the bucket with Terraform; forget it without deleting it.
+removed {
+  from = aws_s3_bucket.media
 
-resource "aws_s3_bucket_ownership_controls" "media" {
-  bucket = aws_s3_bucket.media.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
+  lifecycle {
+    destroy = false
   }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
-  bucket = aws_s3_bucket.media.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-    bucket_key_enabled = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "media" {
-  bucket = aws_s3_bucket.media.id
-  versioning_configuration {
-    status = "Enabled" # accidental overwrite/delete can be undone
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "media" {
-  bucket = aws_s3_bucket.media.id
-  rule {
-    id     = "expire-old-versions"
-    status = "Enabled"
-    filter {}
-    noncurrent_version_expiration {
-      noncurrent_days = 30
-    }
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
-  }
-}
-
-resource "aws_s3_bucket_policy" "media" {
-  bucket     = aws_s3_bucket.media.id
-  depends_on = [aws_s3_bucket_public_access_block.media]
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "CloudFrontReadViaOAC"
-        Effect    = "Allow"
-        Principal = { Service = "cloudfront.amazonaws.com" }
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.media.arn}/media/*"
-        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.main.arn } }
-      },
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource  = [aws_s3_bucket.media.arn, "${aws_s3_bucket.media.arn}/*"]
-        Condition = { Bool = { "aws:SecureTransport" = "false" } }
-      },
-    ]
-  })
 }

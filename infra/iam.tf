@@ -79,14 +79,14 @@ resource "aws_iam_role_policy" "task_app" {
         Sid      = "MediaObjects"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = "${aws_s3_bucket.media.arn}/media/*"
+        Resource = "${local.media_bucket_arn}/media/*"
       },
       {
         # HeadObject on a missing key returns 403 instead of 404 without ListBucket
         Sid       = "MediaList"
         Effect    = "Allow"
         Action    = "s3:ListBucket"
-        Resource  = aws_s3_bucket.media.arn
+        Resource  = local.media_bucket_arn
         Condition = { StringLike = { "s3:prefix" = ["media/*"] } }
       },
       {

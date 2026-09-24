@@ -164,25 +164,35 @@ STORAGES = {
 }
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-SERVE_MEDIA = env_bool('SERVE_MEDIA', DEBUG)  # local only; on AWS media is served by CloudFront from S3
+SERVE_MEDIA = env_bool('SERVE_MEDIA', DEBUG)  # local only; on AWS uploads are served from S3
 
 AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', '')
+MEDIA_HOSTS = []
 if AWS_STORAGE_BUCKET_NAME:
-    MEDIA_DOMAIN = os.environ['MEDIA_DOMAIN']  # the CloudFront domain that fronts the bucket
+    # Uploads live in a private S3 bucket. Browsers get short-lived pre-signed
+    # URLs (SigV4, 1 hour) generated per page render: nothing in the bucket is
+    # ever public, and user content is served from a different origin than the
+    # application (a malicious file could not run script on our domain).
+    _region = os.environ.get('AWS_REGION', 'us-east-1')
     STORAGES['default'] = {
         'BACKEND': 'storages.backends.s3.S3Storage',
         'OPTIONS': {
             'bucket_name': AWS_STORAGE_BUCKET_NAME,
-            'region_name': os.environ.get('AWS_REGION', 'us-east-1'),
+            'region_name': _region,
             'location': 'media',
-            'custom_domain': MEDIA_DOMAIN,
-            'querystring_auth': False,  # objects are private; CloudFront reads them via OAC
+            'signature_version': 's3v4',
+            'addressing_style': 'virtual',
+            'querystring_auth': True,
+            'querystring_expire': 3600,
             'file_overwrite': False,
             'default_acl': None,
-            'object_parameters': {'CacheControl': 'public, max-age=86400'},
+            'object_parameters': {'CacheControl': 'private, max-age=3600'},
         },
     }
-    MEDIA_URL = f'https://{MEDIA_DOMAIN}/media/'
+    MEDIA_HOSTS = [
+        f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com',
+        f'https://{AWS_STORAGE_BUCKET_NAME}.s3.{_region}.amazonaws.com',
+    ]
 
 MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE_MB', '5')) * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024
@@ -228,8 +238,7 @@ SECURE_CSP = {
     'form-action': [CSP.SELF],
     'frame-ancestors': [CSP.NONE],
 }
-if AWS_STORAGE_BUCKET_NAME:
-    SECURE_CSP['img-src'].append(f'https://{MEDIA_DOMAIN}')
+SECURE_CSP['img-src'] += MEDIA_HOSTS  # pre-signed S3 URLs for uploads
 
 ADMIN_URL = os.environ.get('ADMIN_URL', 'admin/')
 

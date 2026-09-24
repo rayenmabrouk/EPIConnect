@@ -57,9 +57,9 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-      - name: State bucket (idempotent) + init
+      - name: S3 buckets (idempotent) + init
         run: |
-          BUCKET=$(scripts/bootstrap-tfstate.sh)
+          BUCKET=$(scripts/bootstrap-buckets.sh)
           terraform -chdir=infra init -backend-config="bucket=${BUCKET}"
       - name: Plan
         run: |
@@ -128,3 +128,7 @@ jobs:
           BUCKET="epiconnect-tfstate-$(aws sts get-caller-identity --query Account --output text)"
           terraform -chdir=infra init -backend-config="bucket=${BUCKET}"
           terraform -chdir=infra destroy -auto-approve
+      - name: Delete the uploads bucket (created outside Terraform)
+        run: |
+          MEDIA="epiconnect-media-$(aws sts get-caller-identity --query Account --output text)"
+          aws s3 rb "s3://${MEDIA}" --force || echo "bucket ${MEDIA} not found"
