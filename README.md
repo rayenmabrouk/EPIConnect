@@ -1,6 +1,6 @@
 # EPIConnect
 
-**A campus community platform for EPI Digital School, modernised from a single Azure VM to a containerised, security-gated deployment on AWS.**
+**A campus community platform, modernised from a single Azure VM to a containerised, security-gated deployment on AWS.**
 
 [![CI/CD](https://github.com/rayenmabrouk/EPIConnect/actions/workflows/pipeline.yml/badge.svg)](https://github.com/rayenmabrouk/EPIConnect/actions/workflows/pipeline.yml)
 [![CodeQL](https://github.com/rayenmabrouk/EPIConnect/actions/workflows/codeql.yml/badge.svg)](https://github.com/rayenmabrouk/EPIConnect/actions/workflows/codeql.yml)

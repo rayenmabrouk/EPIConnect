@@ -4,7 +4,7 @@ Last updated: 2026-09-24
 
 ## 1. What EPIConnect is
 
-EPIConnect is a community platform for the students of EPI Digital School (Sousse, Tunisia). It is a server-rendered Django 6 application with nine apps:
+EPIConnect is a community platform for university students. It is a server-rendered Django 6 application with nine apps:
 
 | App | What it does |
 |---|---|
