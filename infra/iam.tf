@@ -12,9 +12,10 @@
 #                    media/ in the uploads bucket (+ read the app secret for
 #                    the one-off bootstrap_admin command)
 # ---------------------------------------------------------------------------
+# The LabRole ARN is built from its name instead of an IAM lookup: the Academy
+# lab user cannot always read IAM.
 locals {
   create_roles       = var.lab_role_name == ""
-  # Built from the name instead of an IAM lookup: the Academy lab user cannot always read IAM
   lab_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.lab_role_name}"
   execution_role_arn = local.create_roles ? aws_iam_role.execution[0].arn : local.lab_role_arn
   task_role_arn      = local.create_roles ? aws_iam_role.task[0].arn : local.lab_role_arn
