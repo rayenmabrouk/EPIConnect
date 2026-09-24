@@ -1,0 +1,53 @@
+# Local environment that mirrors production: same image, PostgreSQL,
+# migrations run once as a separate container before the web container starts.
+#   docker compose up --build        -> http://localhost:8000
+#   docker compose run --rm web createsuperuser
+name: epiconnect
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: epiconnect
+      POSTGRES_USER: epiconnect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U epiconnect -d epiconnect"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    image: epiconnect:local
+    command: ["migrate"]
+    env_file: .env.example
+    environment: &appenv
+      DATABASE_URL: postgres://epiconnect:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/epiconnect
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: epiconnect:local
+    env_file: .env.example
+    environment: *appenv
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - media:/app/media
+    read_only: true            # same as ECS: readonlyRootFilesystem
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  media:
