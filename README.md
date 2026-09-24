@@ -42,6 +42,7 @@ Why these services, the request path, and the trade-offs: [docs/ARCHITECTURE.md]
 - **CI/CD** on `main`: tests on PostgreSQL, all security gates, image build, Trivy, container run test and ZAP baseline passed; image pushed to ECR; migrations ran as a one-off Fargate task; rolling deploy and smoke test passed.
 - **Ops workflow**: `bootstrap_admin` and `seed_perks` ran as one-off tasks.
 - **Live end-to-end check** against the deployed URL: registration (RDS), login (session + CSRF), profile-picture upload to S3 through the task role, and the pre-signed image URL loading under the Content-Security-Policy.
+- **Torn down** afterwards with the Infrastructure workflow (`destroy`) to save lab credit. Only the tiny Terraform state bucket remains. Recreate: Infrastructure -> `apply`, then CI/CD -> run workflow, then Ops -> `bootstrap_admin` ([runbook](docs/RUNBOOK.md#first-deployment-to-aws-aws-academy)).
 
 ## How this was built
 
