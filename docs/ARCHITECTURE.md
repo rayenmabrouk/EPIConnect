@@ -198,7 +198,7 @@ Three workflows plus Dependabot:
 
 ```mermaid
 flowchart LR
-    push["push / PR"] --> test["test<br/>ruff, migrations check,<br/>check --deploy,<br/>49 tests on PostgreSQL,<br/>coverage"]
+    push["push / PR"] --> test["test<br/>ruff, migrations check,<br/>check --deploy,<br/>50 tests on PostgreSQL,<br/>coverage"]
     push --> sec["security<br/>gitleaks, Bandit, pip-audit,<br/>npm audit, hadolint,<br/>zizmor, Checkov"]
     push --> tf["terraform<br/>fmt, validate"]
     test & sec & tf --> image["image<br/>build, Trivy gate, SBOM,<br/>run like ECS + checks,<br/>OWASP ZAP baseline"]

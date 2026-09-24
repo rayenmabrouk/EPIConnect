@@ -17,7 +17,7 @@ What you can put on a CV, and what you can defend. Everything below exists in th
 
 ## Application
 
-Campus community platform for EPI Digital School (Django 6, PostgreSQL): lost & found with photos and a status workflow, student marketplace, Q&A "Help Wall" with anonymous posts, one-to-one chat with images, notifications, and a gamified points/badges/perks system. Student-ID verification by admins, security audit dashboard. 9 Django apps, 17 models, 49 automated tests.
+Campus community platform for EPI Digital School (Django 6, PostgreSQL): lost & found with photos and a status workflow, student marketplace, Q&A "Help Wall" with anonymous posts, one-to-one chat with images, notifications, and a gamified points/badges/perks system. Student-ID verification by admins, security audit dashboard. 9 Django apps, 17 models, 50 automated tests.
 
 ## AWS
 

@@ -13,6 +13,11 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # Base image major versions (e.g. Node 22 LTS -> 25, Python 3.13 -> 3.14)
+      # are upgraded deliberately, not by bot: only patch/minor tags here.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }

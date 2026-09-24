@@ -85,7 +85,7 @@ If every container ran `migrate` at start-up, two tasks starting together would 
 
 ### How does GitHub Actions work here?
 `.github/workflows/pipeline.yml`:
-- **test**: ruff, `makemigrations --check`, Django's `check --deploy --fail-level WARNING` with production settings, 49 tests against a PostgreSQL service container, coverage.
+- **test**: ruff, `makemigrations --check`, Django's `check --deploy --fail-level WARNING` with production settings, 50 tests against a PostgreSQL service container, coverage.
 - **security**: gitleaks (full history), Bandit, pip-audit, npm audit, hadolint, zizmor, Checkov.
 - **terraform**: fmt + validate.
 - **image**: build once; Trivy gate; SBOM; run the image the way ECS runs it (read-only FS, no capabilities, non-root, separate migrate container) and test it; OWASP ZAP baseline against it; on `main`, push to ECR tagged with the commit SHA.
