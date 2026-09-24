@@ -1,0 +1,36 @@
+# Operational one-off tasks against the running environment, e.g. creating the
+# first admin (password read inside the task from Secrets Manager) or seeding
+# the default wallet perks. Uses the service's current task definition.
+name: Ops
+
+on:
+  # checkov:skip=CKV_GHA_7:Operational workflow, not a build; the input is a fixed choice list
+  workflow_dispatch:
+    inputs:
+      command:
+        description: Management command to run in a one-off Fargate task
+        type: choice
+        options: [bootstrap_admin, seed_perks, migrate]
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+      - name: Run one-off task
+        env:
+          COMMAND: ${{ inputs.command }}
+        run: scripts/ecs-run.sh "$COMMAND"
