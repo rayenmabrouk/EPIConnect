@@ -42,7 +42,7 @@
                 </div>
                 {% if perk.available %}
                 <form method="post" action="{% url 'wallet:redeem' perk.pk %}"
-                      onsubmit="return confirm('Redeem {{ perk.title }} for {{ perk.cost }} EPI-points?')">
+                      data-confirm="Redeem {{ perk.title }} for {{ perk.cost }} EPI-points?">
                     {% csrf_token %}
                     <button type="submit"
                             {% if wallet.balance < perk.cost %}disabled title="Not enough points"{% endif %}

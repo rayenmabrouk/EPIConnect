@@ -32,3 +32,12 @@ db.sqlite3
 # OS
 .DS_Store
 Thumbs.db
+
+# Build outputs
+static/css/app.css
+frontend/node_modules/
+.coverage
+coverage.xml
+htmlcov/
+*.sarif
+!.env.example

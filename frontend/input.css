@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Previously an inline <style> block in templates/base.html */
+.dropdown:hover .dropdown-menu,
+.dropdown:focus-within .dropdown-menu { display: block; }
+#mobile-menu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+#mobile-menu.open { max-height: 500px; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+.dark ::-webkit-scrollbar-thumb { background: #334155; }

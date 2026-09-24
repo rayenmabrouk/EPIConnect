@@ -6,7 +6,7 @@
 
 {% block extra_css %}
 <style>
-    .slider-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.7s ease-in-out; }
+    .slider-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.7s ease-in-out; padding-left: inherit; padding-right: inherit; }
     .slider-slide.active { opacity: 1; }
     .slider-dot { transition: all 0.3s; }
     .slider-dot.active { width: 2rem; }
@@ -129,17 +129,17 @@
         <!-- Slider Controls -->
         <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 z-10">
             <!-- Prev Arrow -->
-            <button onclick="prevSlide()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white border border-white/10 transition-all">
+            <button type="button" data-slide-to="prev" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white border border-white/10 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
             <!-- Dots -->
             <div class="flex items-center gap-2">
-                <button onclick="goToSlide(0)" class="slider-dot active h-2 w-8 rounded-full bg-primary-500" data-dot="0"></button>
-                <button onclick="goToSlide(1)" class="slider-dot h-2 w-2 rounded-full bg-white/30 hover:bg-white/50" data-dot="1"></button>
-                <button onclick="goToSlide(2)" class="slider-dot h-2 w-2 rounded-full bg-white/30 hover:bg-white/50" data-dot="2"></button>
+                <button type="button" data-slide-to="0" class="slider-dot active h-2 w-8 rounded-full bg-primary-500" data-dot="0"></button>
+                <button type="button" data-slide-to="1" class="slider-dot h-2 w-2 rounded-full bg-white/30 hover:bg-white/50" data-dot="1"></button>
+                <button type="button" data-slide-to="2" class="slider-dot h-2 w-2 rounded-full bg-white/30 hover:bg-white/50" data-dot="2"></button>
             </div>
             <!-- Next Arrow -->
-            <button onclick="nextSlide()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white border border-white/10 transition-all">
+            <button type="button" data-slide-to="next" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white border border-white/10 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
         </div>
@@ -490,7 +490,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function() {
     const slides = document.querySelectorAll('.slider-slide');
     const dots = document.querySelectorAll('.slider-dot');
@@ -519,10 +519,14 @@
         if (interval) clearInterval(interval);
     }
 
-    // Expose globally for onclick handlers
-    window.goToSlide = function(i) { goTo(i); startAuto(); };
-    window.nextSlide = function() { next(); startAuto(); };
-    window.prevSlide = function() { prev(); startAuto(); };
+    // Slider controls declare data-slide-to="prev|next|<index>" (no inline handlers: CSP)
+    document.querySelectorAll('[data-slide-to]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const v = btn.getAttribute('data-slide-to');
+            if (v === 'prev') prev(); else if (v === 'next') next(); else goTo(parseInt(v, 10));
+            startAuto();
+        });
+    });
 
     // Pause on hover
     const slider = document.getElementById('hero-slider');

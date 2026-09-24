@@ -42,7 +42,7 @@
         <!-- Actions -->
         <div class="flex items-center space-x-6 pt-4 border-t border-stone-200 dark:border-slate-700/50">
             {% if user.is_authenticated %}
-            <button onclick="toggleLike({{ post.pk }}, this)" class="flex items-center space-x-1.5 text-sm
+            <button type="button" data-action="toggle-like" data-post-id="{{ post.pk }}" class="flex items-center space-x-1.5 text-sm
                 {% if user_liked %}text-red-500{% else %}text-gray-400 dark:text-slate-500 hover:text-red-500{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="{% if user_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
@@ -66,7 +66,7 @@
             </span>
 
             {% if user == post.author %}
-            <form method="post" action="{% url 'social:delete' post.pk %}" class="ml-auto" onsubmit="return confirm('Delete this post and all its comments?')">
+            <form method="post" action="{% url 'social:delete' post.pk %}" class="ml-auto" data-confirm="Delete this post and all its comments?">
                 {% csrf_token %}
                 <button type="submit" class="flex items-center space-x-1.5 text-sm text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -132,7 +132,7 @@
                         </span>
                         <span class="text-xs text-gray-400 dark:text-slate-500">{{ comment.created_at|timesince }} ago</span>
                         {% if user == comment.author %}
-                        <form method="post" action="{% url 'social:comment_delete' comment.pk %}" class="ml-auto" onsubmit="return confirm('Delete this comment?')">
+                        <form method="post" action="{% url 'social:comment_delete' comment.pk %}" class="ml-auto" data-confirm="Delete this comment?">
                             {% csrf_token %}
                             <button type="submit" class="text-gray-300 dark:text-slate-600 hover:text-red-500 transition-colors">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,28 +153,3 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script>
-function toggleLike(postId, btn) {
-    fetch(`/social/${postId}/like/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-    })
-    .then(res => res.json())
-    .then(data => {
-        const svg = btn.querySelector('svg');
-        const count = btn.querySelector('.like-count');
-        count.textContent = data.count;
-        if (data.liked) {
-            btn.classList.remove('text-gray-400', 'dark:text-slate-500');
-            btn.classList.add('text-red-500');
-            svg.setAttribute('fill', 'currentColor');
-        } else {
-            btn.classList.remove('text-red-500');
-            btn.classList.add('text-gray-400', 'dark:text-slate-500');
-            svg.setAttribute('fill', 'none');
-        }
-    });
-}
-</script>
-{% endblock %}

@@ -1,139 +1,16 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en" class="h-full dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}EPIConnect{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50:'#fef2f2',100:'#fee2e2',200:'#fecaca',300:'#fca5a5',
-                            400:'#f87171',500:'#ef4444',600:'#dc2626',700:'#b91c1c',
-                            800:'#991b1b',900:'#7f1d1d',950:'#450a0a'
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.5s ease-out',
-                        'slide-up': 'slideUp 0.5s ease-out',
-                        'slide-down': 'slideDown 0.3s ease-out',
-                        'float': 'float 6s ease-in-out infinite',
-                    },
-                    keyframes: {
-                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-                        slideDown: { '0%': { opacity: '0', transform: 'translateY(-10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-                        float: { '0%, 100%': { transform: 'translateY(0px)' }, '50%': { transform: 'translateY(-10px)' } },
-                    }
-                }
-            },
-            plugins: [
-                tailwind.plugin(function({ addComponents, theme }) {
-                    addComponents({
-                        '.btn-primary': {
-                            backgroundColor: theme('colors.primary.500'),
-                            color: '#fff',
-                            fontWeight: '500',
-                            borderRadius: theme('borderRadius.xl'),
-                            boxShadow: '0 1px 2px 0 rgba(239,68,68,0.25)',
-                            transition: 'all 0.2s',
-                            '&:hover': {
-                                backgroundColor: theme('colors.primary.600'),
-                                boxShadow: '0 4px 6px -1px rgba(239,68,68,0.3)',
-                            },
-                        },
-                        '.btn-secondary': {
-                            backgroundColor: theme('colors.stone.50'),
-                            border: '1px solid ' + theme('colors.stone.300'),
-                            color: theme('colors.gray.700'),
-                            fontWeight: '500',
-                            borderRadius: theme('borderRadius.xl'),
-                            transition: 'all 0.2s',
-                            '&:hover': {
-                                backgroundColor: theme('colors.stone.200'),
-                            },
-                        },
-                        '.card': {
-                            backgroundColor: theme('colors.stone.50'),
-                            border: '1px solid ' + theme('colors.stone.200'),
-                            borderRadius: theme('borderRadius.2xl'),
-                            boxShadow: theme('boxShadow.sm'),
-                            transition: 'all 0.3s cubic-bezier(0.4,0,0.2,1)',
-                            '&:hover': {
-                                boxShadow: theme('boxShadow.lg'),
-                                transform: 'translateY(-2px)',
-                            },
-                        },
-                        '.card-static': {
-                            backgroundColor: theme('colors.stone.50'),
-                            border: '1px solid ' + theme('colors.stone.200'),
-                            borderRadius: theme('borderRadius.2xl'),
-                            boxShadow: theme('boxShadow.sm'),
-                        },
-                        '.nav-link': {
-                            padding: theme('spacing[2]') + ' ' + theme('spacing[3.5]'),
-                            borderRadius: theme('borderRadius.xl'),
-                            fontSize: theme('fontSize.sm'),
-                            fontWeight: '500',
-                            color: theme('colors.gray.600'),
-                            transition: 'all 0.2s',
-                            '&:hover': {
-                                color: theme('colors.primary.500'),
-                                backgroundColor: theme('colors.stone.200'),
-                            },
-                        },
-                    });
-                }),
-                tailwind.plugin(function({ addComponents, theme }) {
-                    addComponents({
-                        '.dark .btn-secondary': {
-                            backgroundColor: theme('colors.slate.800'),
-                            borderColor: theme('colors.slate.700'),
-                            color: theme('colors.slate.300'),
-                            '&:hover': {
-                                backgroundColor: theme('colors.slate.700'),
-                            },
-                        },
-                        '.dark .card': {
-                            backgroundColor: theme('colors.slate.800'),
-                            borderColor: theme('colors.slate.700'),
-                            '&:hover': {
-                                boxShadow: '0 10px 15px -3px rgba(15,23,42,0.5)',
-                            },
-                        },
-                        '.dark .card-static': {
-                            backgroundColor: theme('colors.slate.800'),
-                            borderColor: theme('colors.slate.700'),
-                        },
-                        '.dark .nav-link': {
-                            color: theme('colors.slate.400'),
-                            '&:hover': {
-                                color: theme('colors.primary.400'),
-                                backgroundColor: theme('colors.slate.800'),
-                            },
-                        },
-                    });
-                }),
-            ],
-        }
-        if (localStorage.getItem('darkMode') === 'false') {
-            document.documentElement.classList.remove('dark');
-        }
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <script nonce="{{ csp_nonce }}">
+        try { if (localStorage.getItem('darkMode') === 'false') document.documentElement.classList.remove('dark'); } catch (e) {}
     </script>
-    <style>
-        .dropdown:hover .dropdown-menu,
-        .dropdown:focus-within .dropdown-menu { display: block; }
-        #mobile-menu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-        #mobile-menu.open { max-height: 500px; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-        .dark ::-webkit-scrollbar-thumb { background: #334155; }
-    </style>
+    <script src="{% static 'js/app.js' %}" defer></script>
     {% block extra_css %}{% endblock %}
 </head>
 <body class="min-h-screen flex flex-col bg-stone-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 antialiased">
@@ -192,7 +69,7 @@
                 <!-- Right: Actions -->
                 <div class="flex items-center space-x-1.5">
                     <!-- Dark Mode -->
-                    <button onclick="toggleDarkMode()" class="p-2 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-stone-200 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200" style="transition: all 0.2s" title="Toggle theme">
+                    <button type="button" data-action="toggle-dark" class="p-2 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-stone-200 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200" style="transition: all 0.2s" title="Toggle theme">
                         <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
                     </button>
@@ -274,7 +151,7 @@
                     {% endif %}
 
                     <!-- Mobile hamburger -->
-                    <button onclick="document.getElementById('mobile-menu').classList.toggle('open')" class="md:hidden p-2 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-stone-200 dark:hover:bg-slate-800" style="transition: all 0.2s">
+                    <button type="button" data-action="toggle-menu" class="md:hidden p-2 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-stone-200 dark:hover:bg-slate-800" style="transition: all 0.2s">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                     </button>
                 </div>
@@ -341,49 +218,6 @@
             <p class="text-xs text-gray-400 dark:text-slate-500">&copy; 2026 EPIConnect — PFA Project, EPI Digital School.</p>
         </div>
     </footer>
-
-    <script>
-    function toggleDarkMode() {
-        document.documentElement.classList.toggle('dark');
-        localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
-    }
-    </script>
-
-    {% if user.is_authenticated %}
-    <script>
-    (function() {
-        const notifList = document.getElementById('notification-list');
-        if (!notifList) return;
-        function loadNotifications() {
-            fetch('/notifications/dropdown/').then(r => r.json()).then(data => {
-                if (!data.notifications || !data.notifications.length) {
-                    notifList.innerHTML = '<p class="p-6 text-gray-400 dark:text-slate-500 text-sm text-center">All caught up!</p>';
-                    return;
-                }
-                const icons = {
-                    message: { bg: 'bg-blue-500/10', color: 'text-blue-500', path: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
-                    comment: { bg: 'bg-emerald-500/10', color: 'text-emerald-500', path: 'M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z' },
-                    like: { bg: 'bg-pink-500/10', color: 'text-pink-500', path: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
-                    alert: { bg: 'bg-amber-500/10', color: 'text-amber-500', path: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
-                };
-                let h = '';
-                data.notifications.forEach(n => {
-                    const t = icons[n.type] || icons.alert;
-                    const fill = n.type === 'like' ? 'currentColor' : 'none';
-                    h += `<a href="${n.link}" class="flex items-center p-3.5 hover:bg-stone-100 dark:hover:bg-slate-700/50 ${!n.is_read ? 'bg-primary-50/50 dark:bg-primary-500/5' : ''}">
-                        <div class="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${t.bg}"><svg class="w-4.5 h-4.5 ${t.color}" fill="${fill}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${t.path}"></path></svg></div>
-                        <div class="ml-3 flex-1 min-w-0"><p class="text-sm ${!n.is_read ? 'text-gray-900 dark:text-slate-100 font-medium' : 'text-gray-500 dark:text-slate-400'} truncate">${n.content}</p><p class="text-xs text-gray-400 dark:text-slate-500 mt-0.5">${n.time}</p></div>
-                        ${!n.is_read ? '<div class="w-2 h-2 bg-primary-500 rounded-full flex-shrink-0 ml-2"></div>' : ''}
-                    </a>`;
-                });
-                notifList.innerHTML = h;
-            }).catch(() => { notifList.innerHTML = '<p class="p-4 text-gray-400 text-sm text-center">Could not load</p>'; });
-        }
-        const dd = notifList.closest('.dropdown');
-        if (dd) { let l = false; dd.addEventListener('mouseenter', () => { if (!l) { loadNotifications(); l = true; } }); setInterval(() => { l = false; }, 30000); }
-    })();
-    </script>
-    {% endif %}
 
     {% block extra_js %}{% endblock %}
 </body>
