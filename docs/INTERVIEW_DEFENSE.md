@@ -37,7 +37,7 @@ The Azure setup was one VM running everything (app, database, Jenkins, Prometheu
 Start from what the application needs: a stateless web process, PostgreSQL, somewhere durable for uploads, HTTPS, and a way to run migrations. Then:
 - Uploads to **S3** make the container stateless -> **Fargate** can run it with no server to manage.
 - Fargate task IPs change on every deploy -> an **ALB** gives a stable target, health checks and rolling deploys.
-- The app needs HTTPS (secure cookies) and I have no domain -> **CloudFront** gives HTTPS on its own domain for free, caches static/media, and serves uploads directly from S3 via Origin Access Control.
+- Uploads stay private in S3; Django hands the browser **pre-signed URLs** that expire after an hour, so nothing is public and user files come from a different origin than the app.
 - Data -> **RDS PostgreSQL** in private subnets.
 - Secrets -> **Secrets Manager**, injected by ECS.
 - Observability -> **CloudWatch**, because JSON logs let me derive security metrics without extra infrastructure.
@@ -50,16 +50,16 @@ Start from what the application needs: a stateless web process, PostgreSQL, some
 - **Fargate** gives: per-task isolation, a task IAM role, rolling deploys with ALB health checks, a deployment circuit breaker that rolls back automatically, and one-off tasks (migrations, admin bootstrap) with the same image and secrets.
 
 ### Isn't the ALB unnecessary cost?
-It's the biggest line in the bill (~$16/month), and I looked for a way around it. With Fargate, something has to track task IPs that change on every deployment, and CloudFront can't point at a task directly. The ALB also does the health checking that makes zero-downtime deploys and the circuit breaker work. The only way to avoid it is a fixed host (EC2 + Elastic IP), which is the architecture I chose *not* to repeat. So it's a deliberate trade-off, not an oversight.
+It's the biggest line in the bill (~$16/month), and I looked for a way around it. With Fargate, something has to track task IPs that change on every deployment, and a DNS name can't follow them. The ALB also does the health checking that makes zero-downtime deploys and the circuit breaker work. The only way to avoid it is a fixed host (EC2 + Elastic IP), which is the architecture I chose *not* to repeat. So it's a deliberate trade-off, not an oversight.
 
 ### Why no NAT gateway? Aren't the tasks in public subnets?
 Yes. A NAT gateway is ~$32/month, more than the compute. The tasks get a public IP only so they can reach ECR, S3, CloudWatch and Secrets Manager. Inbound, the task security group allows only port 8000 from the ALB security group, so being in a public subnet doesn't make them reachable. The database is in private subnets with no internet route at all. In production I'd move tasks to private subnets with VPC endpoints or NAT.
 
-### How is the ALB protected if it's internet-facing?
-Two layers. Its security group only allows the AWS-managed prefix list for CloudFront origin-facing IPs. That list is shared by *every* CloudFront distribution in the world, so CloudFront also sends a secret header (`X-Origin-Verify`); the listener's default action returns 403 and only forwards requests carrying the right value (`infra/edge.tf`).
+### Why is the demo on HTTP? Isn't that insecure?
+Yes, for real users it would be, and I say so. HTTPS needs a certificate: either an ACM certificate for a domain on the ALB, or CloudFront's `*.cloudfront.net` certificate. I have no domain, and AWS Academy denies `cloudfront:CreateDistribution` - my first design was CloudFront in front of the ALB, and the apply failed on exactly that. So the lab deployment is HTTP, and the task definition switches off the HTTPS-only Django settings explicitly (`SECURE_SSL_REDIRECT`, `Secure` cookies, HSTS) - otherwise the CSRF cookie would never be sent back over HTTP and every form would fail. The secure values are the defaults and CI checks them with `manage.py check --deploy`. With a domain it's an ACM certificate, a 443 listener, a redirect on port 80 and removing three environment variables. Uploads are already HTTPS (pre-signed S3 URLs, TLS-only bucket policy).
 
-### The CloudFront -> ALB hop is HTTP. Isn't that insecure?
-TLS terminates at CloudFront. Encrypting that hop needs an ACM certificate on the ALB for a domain name, and I don't have one. The traffic goes from CloudFront's edge to the ALB over AWS's network, the ALB can't be reached directly, and the fix with a domain is one line (`origin_protocol_policy = "https-only"`) plus a certificate. It's documented as the first production change. A consequence I had to handle: the ALB sets `X-Forwarded-Proto: http`, so Django is configured to read `CloudFront-Forwarded-Proto` to know the browser used HTTPS - otherwise `SECURE_SSL_REDIRECT` would loop forever.
+### How did the AWS Academy restrictions change the design?
+Three things I only discovered by applying: CloudFront is fully denied (so no CDN and no HTTPS without a domain); an organisation-level service control policy denies `s3:GetBucketObjectLockConfiguration`, which the Terraform AWS provider reads for every bucket, so the two buckets are created by a CLI script instead; IAM role and OIDC creation are denied, so tasks use `LabRole` and CI uses session credentials. A good answer here: "I designed for the target, tested against the real environment, and adapted where the platform said no - and I documented each constraint and what I'd do in a normal account."
 
 ### Why Terraform, if CloudPulse already shows Terraform?
 Because the environment must be destroyable and recreatable (Academy credits), and clicking it together would not be reproducible. But I kept it deliberately small: one flat configuration (`infra/`), no modules. The interesting part of this project is the application delivery and security, which lives in the pipeline. Terraform owns the infrastructure and the *shape* of the task definition; the pipeline owns which image runs (`ignore_changes` on the service's task definition).
@@ -78,7 +78,7 @@ Jenkins needed a permanent server with sudo access to the host it deployed to; w
 3. Run `migrate` as a **one-off Fargate task** with that revision; wait; check the exit code. If migrations fail, stop - the old version is still serving.
 4. `update-service` to the new revision. ECS starts the new task, the ALB health-checks `/healthz/`, then the old task is drained (minimum healthy 100 %, maximum 200 %) - no downtime.
 5. `wait services-stable`, then verify the service is really running the new revision (if the circuit breaker rolled back, fail).
-6. Smoke test through CloudFront; if it fails, point the service back to the previous revision.
+6. Smoke test against the public URL; if it fails, point the service back to the previous revision.
 
 ### Why run migrations as a separate task?
 If every container ran `migrate` at start-up, two tasks starting together would race, and a failing migration would crash-loop the new tasks while the old ones keep running against a half-migrated schema. A single one-off task before the rollout runs once, and its failure stops the deploy cleanly. The trade-off is that migrations must stay backward-compatible with the previous version for the few minutes both run (add columns first, remove later).
@@ -117,7 +117,7 @@ Because images are immutable and tagged by commit, rolling back is just pointing
 Group them in three layers (details: `docs/ARCHITECTURE.md` section 8):
 - **Pipeline:** secret scanning, SAST (Bandit + CodeQL), dependency scanning, hash-pinned dependencies, IaC scanning, Dockerfile lint, image scanning with a gate, SBOM, DAST (ZAP), pipeline hardening (SHA-pinned actions, minimal token permissions, zizmor).
 - **Application:** brute-force lockout, rate limits, non-spoofable client IP, upload validation, nonce-based CSP, security headers, secure cookies, authorization checks, race-free wallet, audit trail.
-- **Infrastructure:** CloudFront-only ALB, private DB, least-privilege security groups, encryption at rest, TLS-only buckets, secrets manager, non-root read-only containers, immutable images.
+- **Infrastructure:** ALB as the only public component, private DB, least-privilege security groups, encryption at rest, TLS-only buckets, secrets manager, non-root read-only containers, immutable images.
 
 ### What vulnerabilities did you find?
 Good stories to tell, each with a regression test:
@@ -150,13 +150,13 @@ The app logs one JSON object per line to stdout (`core/logging.py`, Gunicorn acc
 Dashboard first (is it traffic, errors, latency, DB?), then Logs Insights, e.g. `fields @timestamp, status, path, duration_ms | filter event = "access" and status >= 500`. ECS service events explain failed task starts (image pull, secret access, health check). `/readyz/` tells me if the app can reach the DB. For a one-off command there's the Ops workflow.
 
 ### How would you scale it?
-Horizontally: the task is stateless (sessions and rate-limit counters in PostgreSQL, uploads in S3), so `desired_count` can go up and an ECS target-tracking policy on CPU or ALB requests per target can manage it. Vertically: bigger task sizes, more Gunicorn workers. Then the database: a bigger instance, read replicas, and RDS Proxy if connection counts grow. CloudFront already offloads static and media. Two things to change as it grows: Redis for rate limiting/caching (DB increments aren't atomic under load), and WebSockets instead of 3-second chat polling.
+Horizontally: the task is stateless (sessions and rate-limit counters in PostgreSQL, uploads in S3), so `desired_count` can go up and an ECS target-tracking policy on CPU or ALB requests per target can manage it. Vertically: bigger task sizes, more Gunicorn workers. Then the database: a bigger instance, read replicas, and RDS Proxy if connection counts grow. A CDN in front would offload static files. Two things to change as it grows: Redis for rate limiting/caching (DB increments aren't atomic under load), and WebSockets instead of 3-second chat polling.
 
 ### What would you change for production?
 In order: OIDC + least-privilege roles instead of Academy credentials; custom domain with ACM and HTTPS to the ALB; WAF; 2+ tasks across AZs with autoscaling; Multi-AZ RDS with deletion protection; private subnets + VPC endpoints; secret rotation; approvals on the production environment; longer log retention and tracing.
 
 ### What does it cost?
-About $52/month if left running (~$1.7/day): ALB $16, RDS $14, public IPv4s $11, Fargate $9, the rest ~$2; CloudFront within the free tier. On the $50 Academy budget I create it for demos and destroy it with the Infrastructure workflow.
+About $52/month if left running (~$1.7/day): ALB $16, RDS $14, public IPv4s $11, Fargate $9, the rest ~$2. On the $50 Academy budget I create it for demos and destroy it with the Infrastructure workflow.
 
 ---
 
@@ -170,4 +170,4 @@ About $52/month if left running (~$1.7/day): ALB $16, RDS $14, public IPv4s $11,
 - **"Where are sessions stored?"** PostgreSQL (Django's default DB sessions) - that's what makes tasks stateless.
 - **"How do you create the first admin?"** Ops workflow -> `bootstrap_admin`; the password is read from Secrets Manager inside the task.
 - **"What's the blast radius if the image is compromised?"** Non-root, read-only filesystem, no capabilities, can only reach AWS APIs over 443 and the DB; its role (in a normal account) can only touch `media/*` in one bucket and read one secret.
-- **"What would you do differently?"** Start with a domain (removes the HTTP hop and the CloudFront-Forwarded-Proto workaround), and use a real AWS account with OIDC from day one.
+- **"What would you do differently?"** Check the lab's permission boundaries before designing (CloudFront was my plan A), get a domain for HTTPS, and use a real AWS account with OIDC from day one.

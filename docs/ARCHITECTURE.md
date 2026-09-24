@@ -45,7 +45,7 @@ flowchart LR
 Request flow inside the container:
 
 1. `HealthCheckMiddleware` answers `/healthz/` (liveness, no I/O) and `/readyz/` (database `SELECT 1`) before host validation, because the load balancer's health checker uses the task's private IP as the `Host` header.
-2. `TrustedProxyMiddleware` replaces `REMOTE_ADDR` with the real client IP taken from `X-Forwarded-For`, trusting only the right-most `TRUSTED_PROXY_COUNT` hops (2 on AWS: CloudFront + ALB). Everything below (axes lockouts, rate limits, audit log) sees a non-spoofable client IP.
+2. `TrustedProxyMiddleware` replaces `REMOTE_ADDR` with the real client IP taken from `X-Forwarded-For`, trusting only the right-most `TRUSTED_PROXY_COUNT` hops (1 on AWS: the ALB). Everything below (axes lockouts, rate limits, audit log) sees a non-spoofable client IP.
 3. Django security middleware: HTTPS redirect, HSTS, `nosniff`, referrer policy, COOP, and a nonce-based Content-Security-Policy (Django 6 built-in).
 4. WhiteNoise serves hashed, pre-compressed static files baked into the image.
 5. Sessions, CSRF, authentication, django-axes (lock after 5 failures), django-ratelimit (per-IP on login/register, per-user on content creation; counters in the database so every worker and every task shares them).
@@ -84,28 +84,27 @@ An earlier, unmerged branch (`v1.1-audit-fixes-docs`) had already fixed several 
 
 ```mermaid
 flowchart LR
-    user["Student browser"] -->|HTTPS| cf
+    user["Student browser"] -->|HTTP| alb
+    user -->|"HTTPS, pre-signed URL"| s3
     subgraph aws["AWS us-east-1"]
-        cf["CloudFront<br/>TLS, HTTP->HTTPS,<br/>caches /static and /media"]
         subgraph vpc["VPC 10.20.0.0/16"]
             subgraph pub["Public subnets (2 AZ)"]
-                alb["Application Load Balancer<br/>SG: CloudFront prefix list only<br/>listener: 403 unless secret header"]
+                alb["Application Load Balancer<br/>health checks, rolling deploys"]
                 task["ECS Fargate task<br/>Gunicorn + Django<br/>read-only root FS, non-root"]
             end
             subgraph priv["Private subnets (2 AZ, no internet route)"]
                 rds[("RDS PostgreSQL 17<br/>encrypted, TLS enforced")]
             end
         end
-        s3[("S3 media bucket<br/>private, OAC read only")]
+        s3[("S3 uploads bucket<br/>private, TLS-only")]
         ecr[("ECR<br/>immutable tags,<br/>scan on push")]
         sm[("Secrets Manager")]
         cw["CloudWatch<br/>logs, metric filters,<br/>alarms, dashboard"]
         ssm[("SSM parameters<br/>deploy metadata")]
     end
-    cf -->|"HTTP + X-Origin-Verify"| alb --> task
-    cf -->|"/media/* (OAC, SigV4)"| s3
+    alb -->|8000| task
     task -->|5432 TLS| rds
-    task -->|PutObject| s3
+    task -->|PutObject, task role| s3
     task -. pull image .-> ecr
     sm -. injected at start .-> task
     task -->|awslogs| cw
@@ -114,33 +113,35 @@ flowchart LR
     gha -. read .-> ssm
 ```
 
+Live URL during the demo: `http://epiconnect-alb-<id>.us-east-1.elb.amazonaws.com` (Terraform output `app_url`, SSM parameter `/epiconnect/deploy/app_url`).
+
 ### What each piece is for
 
 | Service | Role | Why this and not something else |
 |---|---|---|
 | **ECS on Fargate** | Runs the Django container (1 task, 0.25 vCPU / 512 MiB) | See section 5 |
-| **Application Load Balancer** | Stable origin for CloudFront, health checks, zero-downtime rolling deploys | Fargate task IPs change on every deploy; something must track them. The ALB is the one fixed cost that buys that |
-| **CloudFront** | HTTPS on `*.cloudfront.net` without owning a domain, HTTP->HTTPS redirect, edge caching of `/static/` and `/media/`, serves uploads straight from S3 | The application sets `Secure` cookies and needs HTTPS; an ACM certificate on the ALB would need a domain. CloudFront's free tier covers this traffic |
+| **Application Load Balancer** | Public entry point, health checks, zero-downtime rolling deploys | Fargate task IPs change on every deploy; something must track them. The ALB is the one fixed cost that buys that |
 | **RDS PostgreSQL 17** (db.t4g.micro, single-AZ, gp2) | Application data, sessions, rate-limit counters | Managed backups, patching, encryption. Private subnets, only reachable from the task security group, `rds.force_ssl=1` |
-| **S3** (private) | User uploads (profile pictures, item/listing/chat photos) | Containers are disposable; uploads on local disk would vanish on the next deploy. Written by the app through `django-storages`, read only by CloudFront via Origin Access Control |
+| **S3** (private) | User uploads (profile pictures, item/listing/chat photos) | Containers are disposable; uploads on local disk would vanish on the next deploy. Django writes with the task role and hands browsers **pre-signed URLs valid for 1 hour**: nothing is public, and user content is served from a different origin than the application |
 | **ECR** | Image registry | Immutable tags (a tag = a commit SHA forever), scan on push, lifecycle keeps 15 images |
 | **Secrets Manager** | `SECRET_KEY`, DB password, initial admin password (one JSON secret) | ECS injects the values into the container at start; they are not in the image, the task definition, the repository or the pipeline logs |
 | **SSM Parameter Store** | Non-secret deploy metadata written by Terraform (cluster, service, subnets, URL...) | The pipeline reads them at run time: no ARNs or IDs hard-coded in CI |
-| **CloudWatch** | Logs, metrics, alarms, dashboard | Section 8 |
+| **CloudWatch** | Logs, metrics, alarms, dashboard | Section 9 |
 
 ### Network and access control
 
-- **Only CloudFront can reach the ALB.** The ALB security group accepts port 80 only from the AWS-managed prefix list `com.amazonaws.global.cloudfront.origin-facing`. Because *any* CloudFront distribution matches that list, CloudFront also adds a secret `X-Origin-Verify` header; the listener's default action is a fixed 403 and only requests with the right header are forwarded.
+- **The ALB is the only internet-facing component** (port 80).
 - **Only the ALB can reach the task** (security group reference, port 8000). The task's outbound traffic is limited to HTTPS (AWS APIs) and PostgreSQL to the DB security group.
 - **Only the task can reach the database** (security group reference, 5432). The DB subnets have no route to the internet.
 - **No NAT gateway.** Tasks run in public subnets with a public IP purely for outbound calls to ECR, S3, CloudWatch Logs and Secrets Manager (a NAT gateway would cost ~$32/month; VPC interface endpoints ~$7/month each). Inbound is still restricted to the ALB.
 - The default security group of the VPC is emptied so nothing can use it by accident.
+- Client IP: the ALB appends the address it saw to `X-Forwarded-For`; Django trusts exactly one hop (`TRUSTED_PROXY_COUNT=1`), so a forged header cannot bypass lockouts or rate limits.
 
-### Why HTTP between CloudFront and the ALB
+### HTTPS: why the lab deployment is HTTP
 
-TLS terminates at CloudFront. Encrypting the CloudFront -> ALB hop requires an ACM certificate for a domain name on the ALB, and this project has no domain. The hop is protected by the prefix-list security group and the secret header, and the ALB cannot be used directly. With a domain, the fix is an ACM certificate on the ALB and `origin_protocol_policy = "https-only"` (listed in section 10).
+HTTPS needs a TLS certificate. On AWS that is either an ACM certificate for a domain name on the ALB, or CloudFront's default `*.cloudfront.net` certificate. This project has no domain, and **AWS Academy denies `cloudfront:CreateDistribution`** (found when the first design, CloudFront in front of the ALB, was applied). So the lab deployment serves plain HTTP on the ALB's DNS name, and the task definition explicitly switches off the HTTPS-only settings (`SECURE_SSL_REDIRECT`, `Secure` cookies, HSTS). The application itself is HTTPS-ready: the defaults are secure, CI runs Django's deployment checklist with them, and `SECURE_PROXY_SSL_HEADER` reads the ALB's `X-Forwarded-Proto`.
 
-Because the ALB receives plain HTTP it sets `X-Forwarded-Proto: http`, so Django is told to trust `CloudFront-Forwarded-Proto` instead (`SECURE_PROXY_SSL_HEADER`). That header is only trustworthy because the ALB rejects anything that did not come through CloudFront.
+Production (or the lab with a domain): an ACM certificate (DNS validation), an HTTPS listener on 443, the port-80 listener turned into an HTTP->HTTPS redirect, and the three environment overrides removed. Uploads already travel over HTTPS (pre-signed S3 URLs, TLS-only bucket policy).
 
 ### AWS Academy constraints
 
@@ -149,6 +150,8 @@ The deployment runs in an AWS Academy Learner Lab ($50 credit), which shaped a f
 | Constraint | Consequence |
 |---|---|
 | Only `us-east-1` / `us-west-2` | `us-east-1` |
+| CloudFront denied (`CreateDistribution`, `CreateOriginAccessControl`, `List*Policies`) | No CDN; HTTP on the ALB (see above); uploads via pre-signed S3 URLs instead of CloudFront + OAC |
+| Service control policy denies `s3:GetBucketObjectLockConfiguration`, which the Terraform AWS provider reads for every bucket | Both buckets (state, uploads) are created and hardened by `scripts/bootstrap-buckets.sh` (AWS CLI) instead of Terraform |
 | No IAM role or OIDC provider creation | Tasks use the pre-created `LabRole`; GitHub Actions uses the lab's short-lived session credentials (refreshed per lab session with `scripts/refresh-github-aws-secrets.ps1`). `infra/iam.tf` contains the least-privilege execution and task roles used automatically in a normal account (`lab_role_name = ""`); that path is validated but was not deployable in the lab |
 | RDS: no Multi-AZ, no enhanced monitoring / Performance Insights, gp2 only | Single-AZ gp2 instance |
 | Credits are finite | Everything is destroyable with one workflow run and re-creatable in ~15 minutes |
@@ -173,12 +176,12 @@ The decision followed from what the application needs once it is containerised: 
 | Runtime | Gunicorn under systemd on a VM | Immutable container on ECS Fargate, non-root, read-only root FS |
 | Build | `pip install` on the server during deploy | Multi-stage Dockerfile, hash-verified dependencies, static files and compiled CSS baked in |
 | Database | PostgreSQL on the same VM | RDS, private subnets, encrypted, TLS required, automated backups |
-| Uploads | VM disk, not served in production | S3 (private) + CloudFront (OAC) |
+| Uploads | VM disk, not served in production | S3 (private), pre-signed URLs |
 | Secrets | `.env` file on the VM | Secrets Manager, injected by ECS at task start |
-| HTTPS | Nginx + Let's Encrypt | CloudFront default certificate, HTTP->HTTPS redirect, HSTS |
+| HTTPS | Nginx + Let's Encrypt | Not possible in the lab without a domain or CloudFront (section 4); app is HTTPS-ready |
 | Deploy | Jenkins copied files and restarted systemd | GitHub Actions: image -> scans -> ECR -> migration task -> rolling update -> smoke test -> rollback |
 | Migrations | Run by every deploy on the live server | One-off Fargate task before the new version gets traffic; failure stops the deploy |
-| Infrastructure | Hand-built VM (+ NSG in Terraform on a branch) | Terraform: VPC, ALB, ECS, RDS, S3, CloudFront, secrets, monitoring |
+| Infrastructure | Hand-built VM (+ NSG in Terraform on a branch) | Terraform: VPC, ALB, ECS, RDS, ECR, secrets, monitoring; buckets by script |
 | Monitoring | Prometheus + Grafana on the VM | CloudWatch: logs, security metrics from logs, alarms, dashboard |
 | Front-end assets | Tailwind compiled in the browser from a CDN | Compiled at build time, served by WhiteNoise, strict CSP |
 | Local environment | SQLite | `docker compose up`: same image, PostgreSQL, read-only container |
@@ -201,7 +204,7 @@ flowchart LR
     test & sec & tf --> image["image<br/>build, Trivy gate, SBOM,<br/>run like ECS + checks,<br/>OWASP ZAP baseline"]
     image -->|main only| ecr["push to ECR<br/>tag = commit SHA"]
     ecr --> deploy["deploy<br/>register task def,<br/>migration task,<br/>rolling update,<br/>wait stable"]
-    deploy --> smoke["smoke test<br/>via CloudFront"]
+    deploy --> smoke["smoke test<br/>public URL"]
     smoke -->|fails| rollback["roll back to<br/>previous task def"]
 ```
 
@@ -218,7 +221,7 @@ flowchart LR
 3. Run `migrate` as a **one-off Fargate task** with the new revision. If it fails, stop: the service is untouched and the old version keeps serving.
 4. Update the service. ECS starts a new task, waits for the ALB health check (`/healthz/`), then drains the old task (min healthy 100 %, max 200 %): no downtime.
 5. If the new task never becomes healthy, the **deployment circuit breaker** rolls back automatically; the script detects it and fails the job.
-6. `scripts/smoke-test.sh` checks the public URL: health, readiness (DB), pages, redirects, HTTPS redirect, HSTS/CSP/X-Frame-Options/Secure cookie, hashed static files through CloudFront.
+6. `scripts/smoke-test.sh` checks the public URL: health, readiness (DB), pages, login redirect, CSP/X-Frame-Options/nosniff/HttpOnly cookie, hashed static files (plus HTTPS redirect, HSTS and `Secure` cookies when the URL is `https://`).
 7. If the smoke test fails, the workflow points the service back at the previous task definition.
 
 ## 8. DevSecOps and security
@@ -297,7 +300,6 @@ Health checks exist at three levels: the Docker/ECS container health check and t
 | Fargate 0.25 vCPU / 0.5 GB, x86, 1 task | 9.0 |
 | Public IPv4 addresses (2 for the ALB, 1 for the task) | 11.0 |
 | Secrets Manager (1 secret), CloudWatch alarms/logs, ECR, S3 | ~2 |
-| CloudFront | 0 (free tier: 1 TB, 10 M requests) |
 | **Total** | **~$52 / month, ~$1.7 / day** |
 
 Not used, on purpose: NAT gateway (~$32), EKS ($73), Multi-AZ RDS (x2), WAF (~$6+), Container Insights, KMS customer keys, VPC endpoints (~$7 each). On the $50 Academy budget the environment is created for demos and destroyed afterwards (`Infrastructure` workflow -> `destroy`; ~15 minutes to recreate).
@@ -305,7 +307,7 @@ Not used, on purpose: NAT gateway (~$32), EKS ($73), Multi-AZ RDS (x2), WAF (~$6
 ## 11. What would change for a real production launch
 
 1. **Identity:** GitHub OIDC role instead of lab credentials; separate least-privilege task and execution roles (`lab_role_name = ""` already does this); environment protection rules with required reviewers on `production` and `infrastructure`.
-2. **Edge:** custom domain (Route 53 + ACM) on CloudFront and HTTPS to the ALB; AWS WAF with the managed common rule set and rate-based rules; CloudFront and ALB access logs.
+2. **Edge:** custom domain with an ACM certificate on the ALB (HTTPS listener, HTTP->HTTPS redirect, HSTS back on) or CloudFront in front; AWS WAF with the managed common rule set and rate-based rules; ALB access logs.
 3. **Availability:** 2+ tasks across AZs with target-tracking autoscaling on CPU/request count; Multi-AZ RDS; deletion protection and final snapshots.
 4. **Data:** Redis/Valkey (ElastiCache) for atomic rate limiting and caching; automated secret rotation; longer log retention; S3 replication for uploads.
 5. **Network:** private subnets for tasks with VPC endpoints (or NAT); VPC flow logs.

@@ -217,7 +217,7 @@ CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7
 SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = False  # we do not own the parent domain (cloudfront.net)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False  # the app does not own its parent domain
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
@@ -264,7 +264,7 @@ CACHES = {
 SILENCED_SYSTEM_CHECKS = [
     'django_ratelimit.E003', 'django_ratelimit.W001',
     # HSTS includeSubDomains/preload are deliberately off: the app is served on a
-    # cloudfront.net subdomain and we do not control the parent domain.
+    # provider-owned hostname and we do not control the parent domain.
     'security.W005', 'security.W021',
 ]
 RATELIMIT_VIEW = 'core.views.ratelimited'  # HTTP 429 instead of a generic 403

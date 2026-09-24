@@ -20,7 +20,7 @@ urlpatterns = [
 ]
 
 # Local development / docker compose only. On AWS, media lives in S3 and is
-# served by CloudFront; Django never serves user uploads in production.
+# served to browsers through pre-signed URLs; Django never serves user uploads in production.
 if settings.SERVE_MEDIA:
     urlpatterns += [
         re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),

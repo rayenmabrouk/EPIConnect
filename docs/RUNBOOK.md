@@ -29,8 +29,8 @@ DEBUG=true STATIC_MANIFEST=false python manage.py test
 2. **Put them in GitHub** (they expire with the lab session; repeat each session):
    `powershell -ExecutionPolicy Bypass -File scripts\refresh-github-aws-secrets.ps1`
 3. **Create the infrastructure:** GitHub -> Actions -> *Infrastructure* -> Run workflow -> `apply`.
-   The job creates the Terraform state bucket if needed, plans, and applies that plan (~10-15 min, mostly RDS and CloudFront). The ECS service is created with 0 tasks.
-4. **Deploy the application:** Actions -> *CI/CD* -> Run workflow (or push to `main`). The pipeline builds, scans, pushes the image, runs migrations and scales the service to 1 task. The URL is in the run summary and in the SSM parameter `/epiconnect/deploy/app_url`.
+   The job creates the two S3 buckets if needed (`scripts/bootstrap-buckets.sh`), plans, and applies that plan (~12 min, mostly RDS). The ECS service is created with 0 tasks.
+4. **Deploy the application:** Actions -> *CI/CD* -> Run workflow (or push to `main`). The pipeline builds, scans, pushes the image, runs migrations and scales the service to 1 task. The URL is in the run summary / annotation and in the SSM parameter `/epiconnect/deploy/app_url`.
 5. **Create the admin account:** Actions -> *Ops* -> `bootstrap_admin`. Username `admin`; the password is the `ADMIN_PASSWORD` key of the Secrets Manager secret `epiconnect/app` (AWS console -> Secrets Manager -> Retrieve secret value). Optionally run `seed_perks`.
 6. Log in at `/admin/`, verify student accounts (Student profiles -> select -> "Verify selected students").
 
@@ -86,9 +86,9 @@ Merge to `main`. Nothing else: the pipeline does build -> gates -> ECR -> migrat
 | Migration task fails | Bad migration or DB unreachable | Read the task's log stream `web/web/<task-id>`; service was not changed |
 | Task stops with `ResourceInitializationError` | Cannot pull image / read the secret | Check the task has a public IP, outbound 443 allowed, secret exists |
 | Tasks start then get replaced | ALB health check failing | Check `/healthz/` in the task logs; container must listen on 8000 |
-| Site shows 403 "Forbidden" (plain text) | Request reached the ALB without CloudFront's secret header | Use the CloudFront URL, not the ALB DNS name |
-| Redirect loop | `SECURE_PROXY_SSL_HEADER` not set to `HTTP_CLOUDFRONT_FORWARDED_PROTO` | Task definition env (Terraform `ecs.tf`) |
-| 400 Bad Request | Host not in `ALLOWED_HOSTS` | Must be the CloudFront domain (set by Terraform) |
-| CSRF failure on forms | Origin not in `CSRF_TRUSTED_ORIGINS` or cookie not sent over HTTP | Use `https://<cloudfront domain>` |
-| Uploaded image 403 from CloudFront | Object outside `media/` or bucket policy missing | Check `aws_s3_bucket_policy.media` |
+| Redirect loop to https:// | HTTPS settings on without a certificate | Task definition env: `SECURE_SSL_REDIRECT=false` (Terraform `ecs.tf`) |
+| 400 Bad Request | Host not in `ALLOWED_HOSTS` | Must be the ALB DNS name (set by Terraform) |
+| CSRF failure on forms over HTTP | `Secure` CSRF cookie is not sent back over HTTP | `SECURE_COOKIES=false` in the task definition (lab only) |
+| Uploaded image does not load | Pre-signed URL expired (1 h) or object missing | Reload the page; check the object under `media/` in `epiconnect-media-<account>` |
+| Terraform: `AccessDenied ... s3:GetBucketObjectLockConfiguration` | AWS Academy SCP | Buckets must be created by `scripts/bootstrap-buckets.sh`, not Terraform |
 | 429 Too Many Requests | Rate limit or axes lockout | Wait (lockout 1 h) or reset in admin -> Axes |

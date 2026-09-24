@@ -7,7 +7,7 @@
 
 Students report lost and found items, buy and sell on a marketplace, ask for help on a Q&A wall (anonymously if they want), chat, and earn points and badges for helping each other. Only students whose ID has been verified by an administrator can post.
 
-Django 6 · PostgreSQL · Docker · AWS ECS Fargate · RDS · S3 · CloudFront · Terraform · GitHub Actions
+Django 6 · PostgreSQL · Docker · AWS ECS Fargate · RDS · S3 · Terraform · GitHub Actions
 
 ---
 
@@ -15,9 +15,8 @@ Django 6 · PostgreSQL · Docker · AWS ECS Fargate · RDS · S3 · CloudFront �
 
 ```mermaid
 flowchart LR
-    user["Browser"] -->|HTTPS| cf["CloudFront"]
-    cf -->|"only CloudFront allowed"| alb["ALB"] --> ecs["ECS Fargate<br/>Django + Gunicorn"]
-    cf -->|"/media/* via OAC"| s3[("S3 uploads")]
+    user["Browser"] --> alb["ALB"] --> ecs["ECS Fargate<br/>Django + Gunicorn"]
+    user -->|"pre-signed URLs"| s3[("S3 uploads<br/>private")]
     ecs --> rds[("RDS PostgreSQL<br/>private subnets")]
     ecs --> s3
     sm[("Secrets Manager")] -.-> ecs
@@ -25,17 +24,24 @@ flowchart LR
     gh["GitHub Actions<br/>tests, security gates"] -->|image| ecr[("ECR")] -.-> ecs
 ```
 
-Why these services, the request path, and the trade-offs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Why these services, the request path, and the trade-offs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The lab deployment is served over HTTP because AWS Academy blocks CloudFront and the project has no domain for a certificate; see [HTTPS](docs/ARCHITECTURE.md#https-why-the-lab-deployment-is-http).
 
 ## What this project demonstrates
 
 | Area | Highlights |
 |---|---|
-| **Modernisation** | Audited a broken codebase (it did not start), fixed it, and moved it from VM + systemd + Jenkins to immutable containers on ECS Fargate with RDS, S3 and CloudFront |
+| **Modernisation** | Audited a broken codebase (it did not start), fixed it, and moved it from VM + systemd + Jenkins to immutable containers on ECS Fargate with RDS and S3, working within AWS Academy's restrictions |
 | **DevSecOps** | Pipeline gates: gitleaks, Bandit, CodeQL, pip-audit, npm audit, Checkov, hadolint, zizmor, Trivy (+ SBOM), OWASP ZAP against the running container; hash-pinned dependencies and SHA-pinned actions |
 | **Application security** | Fixed a spoofable-IP rate-limit/lockout bypass, stored XSS via uploads, a wallet race condition and points-farming flaws, each with a regression test; nonce-based CSP |
 | **Delivery** | Build once, deploy the same image: ECR -> migration as a one-off task -> rolling update -> smoke test -> automatic rollback |
 | **Operations** | Structured JSON logs turned into CloudWatch security metrics and alarms; dashboard; one-click destroy/recreate for cost control |
+
+## Verified on AWS (24 September 2026)
+
+- **Infrastructure** applied from the Infrastructure workflow (VPC, ALB, ECS Fargate, RDS PostgreSQL 17, ECR, Secrets Manager, CloudWatch alarms and dashboard) in the AWS Academy account.
+- **CI/CD** on `main`: tests on PostgreSQL, all security gates, image build, Trivy, container run test and ZAP baseline passed; image pushed to ECR; migrations ran as a one-off Fargate task; rolling deploy and smoke test passed.
+- **Ops workflow**: `bootstrap_admin` and `seed_perks` ran as one-off tasks.
+- **Live end-to-end check** against the deployed URL: registration (RDS), login (session + CSRF), profile-picture upload to S3 through the task role, and the pre-signed image URL loading under the Content-Security-Policy.
 
 ## How this was built
 
