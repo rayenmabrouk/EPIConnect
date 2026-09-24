@@ -9,3 +9,6 @@
 *.yaml    text eol=lf
 Dockerfile text eol=lf
 *.png     binary
+
+# GitHub language stats: templates are presentation, not the project's language
+*.html linguist-detectable=false
