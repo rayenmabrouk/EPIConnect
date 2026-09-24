@@ -1,6 +1,6 @@
 output "app_url" {
-  description = "Public HTTPS URL of the application"
-  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+  description = "Public URL of the application"
+  value       = local.app_url
 }
 
 output "ecr_repository_url" {

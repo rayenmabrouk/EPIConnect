@@ -2,8 +2,9 @@
 # ECS on Fargate: one service, one container, no servers to patch
 # ---------------------------------------------------------------------------
 locals {
-  app_domain = aws_cloudfront_distribution.main.domain_name
-  image      = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+  app_host = aws_lb.main.dns_name
+  app_url  = "http://${local.app_host}"
+  image    = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
 }
 
 resource "aws_ecs_cluster" "main" {
@@ -53,10 +54,15 @@ resource "aws_ecs_task_definition" "app" {
     linuxParameters        = { initProcessEnabled = true }
 
     environment = [
-      { name = "ALLOWED_HOSTS", value = local.app_domain },
-      { name = "CSRF_TRUSTED_ORIGINS", value = "https://${local.app_domain}" },
-      { name = "SECURE_PROXY_SSL_HEADER", value = "HTTP_CLOUDFRONT_FORWARDED_PROTO" },
-      { name = "TRUSTED_PROXY_COUNT", value = "2" }, # CloudFront + ALB
+      { name = "ALLOWED_HOSTS", value = local.app_host },
+      { name = "CSRF_TRUSTED_ORIGINS", value = local.app_url },
+      { name = "SECURE_PROXY_SSL_HEADER", value = "HTTP_X_FORWARDED_PROTO" },
+      { name = "TRUSTED_PROXY_COUNT", value = "1" }, # the ALB appends the client IP
+      # Lab demo mode: no certificate is possible without a domain name, so the
+      # HTTPS-only settings are switched off explicitly (see docs/ARCHITECTURE.md)
+      { name = "SECURE_SSL_REDIRECT", value = "false" },
+      { name = "SECURE_COOKIES", value = "false" },
+      { name = "SECURE_HSTS_SECONDS", value = "0" },
       { name = "DB_HOST", value = aws_db_instance.main.address },
       { name = "DB_NAME", value = aws_db_instance.main.db_name },
       { name = "DB_USER", value = aws_db_instance.main.username },
@@ -129,21 +135,20 @@ resource "aws_ecs_service" "app" {
     ignore_changes = [task_definition, desired_count]
   }
 
-  depends_on = [aws_lb_listener_rule.from_cloudfront]
+  depends_on = [aws_lb_listener.http]
 }
 
 # Values the delivery pipeline reads at deploy time (no hard-coded ARNs in CI)
 resource "aws_ssm_parameter" "deploy" {
   #checkov:skip=CKV2_AWS_34:Non-secret deployment metadata (names/IDs/URL); secrets live in Secrets Manager
   for_each = {
-    app_url         = "https://${local.app_domain}"
-    cluster         = aws_ecs_cluster.main.name
-    service         = aws_ecs_service.app.name
-    task_family     = aws_ecs_task_definition.app.family
-    ecr_repository  = aws_ecr_repository.app.name
-    subnets         = join(",", aws_subnet.public[*].id)
-    security_group  = aws_security_group.tasks.id
-    distribution_id = aws_cloudfront_distribution.main.id
+    app_url        = local.app_url
+    cluster        = aws_ecs_cluster.main.name
+    service        = aws_ecs_service.app.name
+    task_family    = aws_ecs_task_definition.app.family
+    ecr_repository = aws_ecr_repository.app.name
+    subnets        = join(",", aws_subnet.public[*].id)
+    security_group = aws_security_group.tasks.id
   }
   name  = "/${var.project}/deploy/${each.key}"
   type  = "String"

@@ -27,9 +27,17 @@ class TrustedProxyTests(TestCase):
         self.client.post(reverse('users:login'), {'username': 'nobody', 'password': 'x'}, **headers)
         return AuditLog.objects.filter(action='login_failed').latest('timestamp').ip_address
 
-    @override_settings(TRUSTED_PROXY_COUNT=2)
+    @override_settings(TRUSTED_PROXY_COUNT=1)
     def test_spoofed_left_most_entry_is_ignored(self):
-        # Client sends a fake XFF; CloudFront appends the real client, ALB appends the edge.
+        # Client sends a fake XFF; the ALB appends the address it really saw.
+        ip = self._ip_seen_by_audit_log(
+            HTTP_X_FORWARDED_FOR='6.6.6.6, 203.0.113.7', REMOTE_ADDR='10.0.1.5'
+        )
+        self.assertEqual(ip, '203.0.113.7')
+
+    @override_settings(TRUSTED_PROXY_COUNT=2)
+    def test_two_proxies(self):
+        # e.g. CloudFront -> ALB: client is second from the right
         ip = self._ip_seen_by_audit_log(
             HTTP_X_FORWARDED_FOR='6.6.6.6, 203.0.113.7, 130.176.0.10', REMOTE_ADDR='10.0.1.5'
         )

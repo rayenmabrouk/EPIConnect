@@ -201,13 +201,12 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024
 # Security
 # --------------------------------------------------------------------------
 # Number of reverse proxies in front of the app that append to X-Forwarded-For
-# (CloudFront + ALB on AWS = 2, none locally = 0). See core/middleware.py.
+# (the ALB on AWS = 1, none locally = 0). See core/middleware.py.
 TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', '0'))
 
-# CloudFront talks to the ALB over HTTP inside AWS, so the ALB's own
-# X-Forwarded-Proto says "http". CloudFront-Forwarded-Proto carries what the
-# browser actually used. The header is trustworthy only because the ALB rejects
-# requests that did not come through CloudFront.
+# Header set by the load balancer with the scheme the browser used
+# (HTTP_X_FORWARDED_PROTO behind an ALB). Trustworthy only because the task
+# accepts traffic from the ALB security group alone, and the ALB overwrites it.
 _proxy_ssl_header = os.environ.get('SECURE_PROXY_SSL_HEADER', '')
 if _proxy_ssl_header:
     SECURE_PROXY_SSL_HEADER = (_proxy_ssl_header, 'https')

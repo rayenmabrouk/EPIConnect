@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Post-deployment checks against the public URL (through CloudFront).
-#   scripts/smoke-test.sh https://dxxxxxxxx.cloudfront.net
+# Post-deployment checks against the public URL.
+#   scripts/smoke-test.sh http://epiconnect-alb-123.us-east-1.elb.amazonaws.com
+# HTTPS-only checks (redirect, HSTS, Secure cookies) run when the URL is https://.
 set -euo pipefail
 URL="${1:?usage: smoke-test.sh <base-url>}"
 URL="${URL%/}"
@@ -22,18 +23,24 @@ check "readiness /readyz/ (database)"       200 "$(status "$URL/readyz/")"
 check "home page"                           200 "$(status "$URL/")"
 check "login page"                          200 "$(status "$URL/users/login/")"
 check "private page redirects to login"     302 "$(status "$URL/users/dashboard/")"
-check "HTTP redirected to HTTPS"            301 "$(status "http://${URL#https://}/")"
+if [[ "$URL" == https://* ]]; then
+  check "HTTP redirected to HTTPS"          301 "$(status "http://${URL#https://}/")"
+fi
 
 headers=$(curl -s -D - -o /dev/null --max-time 20 "$URL/")
 has() { if grep -qiE "$1" <<<"$headers"; then echo yes; else echo no; fi; }
-check "HSTS header"          yes "$(has '^strict-transport-security: max-age=31536000')"
 check "CSP with nonce"       yes "$(has "^content-security-policy: .*script-src 'self' 'nonce-")"
 check "X-Frame-Options DENY" yes "$(has '^x-frame-options: DENY')"
-check "Secure CSRF cookie"   yes "$(has '^set-cookie: csrftoken=.*; Secure')"
+check "nosniff"              yes "$(has '^x-content-type-options: nosniff')"
+check "CSRF cookie HttpOnly" yes "$(has '^set-cookie: csrftoken=.*HttpOnly')"
+if [[ "$URL" == https://* ]]; then
+  check "HSTS header"        yes "$(has '^strict-transport-security: max-age=31536000')"
+  check "Secure CSRF cookie" yes "$(has '^set-cookie: csrftoken=.*; Secure')"
+fi
 
 css=$(curl -s --max-time 20 "$URL/" | grep -o '/static/css/app\.[0-9a-f]*\.css' | head -1 || true)
 if [ -n "$css" ]; then
-  check "hashed stylesheet served via CloudFront" 200 "$(status "$URL$css")"
+  check "hashed stylesheet served (WhiteNoise)" 200 "$(status "$URL$css")"
 else
   check "hashed stylesheet referenced" yes no
 fi

@@ -42,11 +42,11 @@ class TrustedProxyMiddleware:
     """Replace REMOTE_ADDR with the real client IP taken from X-Forwarded-For.
 
     Only the right-most TRUSTED_PROXY_COUNT hops are trusted. Each trusted
-    proxy appends the address it received the connection from, so with
-    CloudFront -> ALB -> app (count = 2) the header ends with
-    "<client>, <cloudfront edge>" and the client is the second entry from the
-    right. Anything to the left of that was supplied by the client and is
-    ignored, which is what makes the value non-spoofable.
+    proxy appends the address it received the connection from, so behind one
+    ALB (count = 1) the last entry is the client as the ALB saw it; with two
+    proxies (e.g. CloudFront -> ALB, count = 2) it is the second from the
+    right. Anything to the left was supplied by the client and is ignored,
+    which is what makes the value non-spoofable.
 
     With TRUSTED_PROXY_COUNT = 0 (local development) the header is ignored.
     """

@@ -3,7 +3,7 @@
 #   pull request : test -> security (secrets, SAST, SCA, IaC) -> image (build,
 #                  scan, run, DAST)
 #   push to main : the same gates, then push to ECR -> migrate -> rolling
-#                  deploy on ECS Fargate -> smoke test through CloudFront
+#                  deploy on ECS Fargate -> smoke test against the public URL
 #                  (automatic rollback if the smoke test fails)
 #
 # Third-party actions are pinned to full commit SHAs (tag in the comment) so a
@@ -75,7 +75,7 @@ jobs:
           DEBUG: "false"
           SECRET_KEY: ${{ github.run_id }}-check-deploy-only-not-a-secret-0123456789abcdef
           ALLOWED_HOSTS: epiconnect.example
-          SECURE_PROXY_SSL_HEADER: HTTP_CLOUDFRONT_FORWARDED_PROTO
+          SECURE_PROXY_SSL_HEADER: HTTP_X_FORWARDED_PROTO
         run: python manage.py check --deploy --fail-level WARNING
       - name: Unit / integration tests with coverage
         run: |
@@ -314,7 +314,7 @@ jobs:
           IMAGE_URI: ${{ needs.image.outputs.image_uri }}
         run: scripts/ecs-deploy.sh "$IMAGE_URI"
 
-      - name: Smoke test through CloudFront
+      - name: Smoke test against the public URL
         id: smoke
         run: |
           APP_URL=$(aws ssm get-parameter --name /epiconnect/deploy/app_url --query Parameter.Value --output text)

@@ -64,26 +64,22 @@ resource "aws_route_table_association" "public" {
 # Private subnets keep the VPC's implicit local-only route: no path to the internet.
 
 # ---------------------------------------------------------------------------
-# Security groups: CloudFront -> ALB -> tasks -> database, nothing else
+# Security groups: internet -> ALB -> tasks -> database, nothing else
 # ---------------------------------------------------------------------------
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
-}
-
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb"
-  description = "ALB: HTTP from CloudFront edge locations only"
+  description = "ALB: public HTTP entry point"
   vpc_id      = aws_vpc.main.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "alb_from_cloudfront" {
-  #checkov:skip=CKV_AWS_260:False positive: source is the CloudFront origin-facing managed prefix list, not 0.0.0.0/0
+resource "aws_vpc_security_group_ingress_rule" "alb_http" {
+  #checkov:skip=CKV_AWS_260:Public web application; the ALB is the only internet-facing component
   security_group_id = aws_security_group.alb.id
-  description       = "HTTP from CloudFront origin-facing servers"
+  description       = "HTTP from the internet"
   ip_protocol       = "tcp"
   from_port         = 80
   to_port           = 80
-  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_tasks" {
