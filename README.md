@@ -68,12 +68,10 @@ Deploying to AWS, operations, rollback, cost control and troubleshooting: [docs/
 | `infra/` | Terraform for the AWS environment |
 | `.github/workflows/` | CI/CD, CodeQL, Infrastructure, Ops |
 | `scripts/` | Deploy, one-off task, smoke test, container test, state bootstrap |
-| `docs/` | Architecture, runbook, interview preparation, CV summary |
+| `docs/` | Architecture and runbook |
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) - application, original deployment, AWS design, CI/CD, DevSecOps, monitoring, cost
 - [Runbook](docs/RUNBOOK.md) - local run, deployment, rollback, observability, troubleshooting
-- [Interview defense](docs/INTERVIEW_DEFENSE.md) - questions and answers about the implementation
-- [CV project summary](docs/CV_PROJECT_SUMMARY.md)
 - [Security policy](SECURITY.md)
