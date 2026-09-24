@@ -26,7 +26,8 @@ ENV PIP_NO_CACHE_DIR=1 \
 RUN python -m venv /opt/venv
 COPY requirements.txt /tmp/requirements.txt
 # --require-hashes: every wheel must match the sha256 recorded in the lock file
-RUN /opt/venv/bin/pip install --require-hashes --no-deps -r /tmp/requirements.txt
+RUN /opt/venv/bin/pip install --require-hashes --no-deps -r /tmp/requirements.txt \
+ && /opt/venv/bin/python -m pip uninstall --yes pip
 
 # ---------------------------------------------------------------------------
 FROM python:3.13-slim-bookworm AS runtime
@@ -35,10 +36,14 @@ LABEL org.opencontainers.image.title="EPIConnect" \
       org.opencontainers.image.description="Campus community platform (Django)" \
       org.opencontainers.image.source="https://github.com/rayenmabrouk/EPIConnect"
 
-# Apply Debian security updates published after the base image was built
+# Apply Debian security updates published after the base image was built, and
+# remove pip: nothing is installed at runtime, and pip's vendored libraries
+# (msgpack, pkg_resources) were the only HIGH findings in the first image scan.
 RUN apt-get update \
  && apt-get upgrade -y --no-install-recommends \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && python -m pip uninstall --yes pip \
+ && rm -rf /usr/local/lib/python3.13/ensurepip
 
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
