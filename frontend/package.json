@@ -1,0 +1,11 @@
+{
+  "name": "epiconnect-assets",
+  "private": true,
+  "description": "Build-time only: compiles Tailwind CSS into static/css/app.css",
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.js -i input.css -o ../static/css/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
+  }
+}

@@ -39,7 +39,7 @@
                          class="w-16 h-16 rounded-xl object-cover border border-stone-200 dark:border-slate-700">
                     <div>
                         <p class="text-sm text-gray-600 dark:text-slate-400">Current picture</p>
-                        <button type="button" onclick="confirmRemovePicture()"
+                        <button type="button" data-action="submit-with-confirm" data-form="remove-picture-form" data-confirm="Are you sure you want to remove your profile picture?"
                                 class="mt-1 text-sm text-red-500 hover:text-red-600 font-medium flex items-center transition-colors">
                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -79,12 +79,4 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script>
-function confirmRemovePicture() {
-    if (confirm('Are you sure you want to remove your profile picture?')) {
-        document.getElementById('remove-picture-form').submit();
-    }
-}
-</script>
-{% endblock %}
+

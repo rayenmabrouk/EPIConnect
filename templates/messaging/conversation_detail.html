@@ -115,7 +115,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function() {
     const conversationId = {{ conversation.pk }};
     const chatBox = document.getElementById('chat-box');
