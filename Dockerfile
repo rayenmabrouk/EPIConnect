@@ -8,7 +8,7 @@
 # Base images are pinned by tag (literal FROM lines so Dependabot can bump them).
 
 # ---------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS assets
+FROM node:25-bookworm-slim AS assets
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
