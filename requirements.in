@@ -1,0 +1,18 @@
+# Runtime dependencies (direct). Pinned + hashed lock file: requirements.txt
+# Regenerate: uv pip compile requirements.in --generate-hashes --python-version 3.13 -o requirements.txt
+Django==6.0.8
+gunicorn==26.2.0
+whitenoise==6.12.0
+django-axes==8.3.1
+django-ratelimit==4.1.0
+psycopg[binary]==3.3.6
+pillow==12.3.0
+dj-database-url==3.1.2
+django-storages[s3]==1.14.6
+boto3==1.43.101
+python-dotenv==1.2.3
+
+# Transitive dependencies pinned above the versions with known vulnerabilities
+# (found by pip-audit in CI; see docs/ARCHITECTURE.md > DevSecOps)
+sqlparse>=0.6.0
+urllib3>=2.7.0

@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.db.models import Sum
+from django.db import transaction
+from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -87,32 +88,42 @@ class LeaderboardView(View):
 
 
 class RedeemView(LoginRequiredMixin, View):
+    """Spend points on a perk.
+
+    The wallet and perk rows are locked (SELECT ... FOR UPDATE) for the whole
+    check-then-debit sequence. Without the lock, two concurrent requests could
+    both pass the balance check and spend the same points twice, or both take
+    the last unit of a limited perk.
+    """
+
     def post(self, request, pk):
-        perk = get_object_or_404(Perk, pk=pk, is_active=True)
-        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        with transaction.atomic():
+            perk = get_object_or_404(Perk.objects.select_for_update(), pk=pk, is_active=True)
+            Wallet.objects.get_or_create(user=request.user)
+            wallet = Wallet.objects.select_for_update().get(user=request.user)
 
-        if not perk.available:
-            messages.error(request, f'"{perk.title}" is out of stock.')
-            return redirect(reverse('wallet:perks'))
+            if not perk.available:
+                messages.error(request, f'"{perk.title}" is out of stock.')
+                return redirect(reverse('wallet:perks'))
 
-        if wallet.balance < perk.cost:
-            messages.error(request, f'Not enough points. You need {perk.cost} pts but have {wallet.balance} pts.')
-            return redirect(reverse('wallet:perks'))
+            if wallet.balance < perk.cost:
+                messages.error(request, f'Not enough points. You need {perk.cost} pts but have {wallet.balance} pts.')
+                return redirect(reverse('wallet:perks'))
 
-        wallet.balance -= perk.cost
-        wallet.save(update_fields=['balance'])
+            wallet.balance = F('balance') - perk.cost
+            wallet.save(update_fields=['balance'])
 
-        Transaction.objects.create(
-            wallet=wallet,
-            type=Transaction.REDEEM,
-            amount=perk.cost,
-            description=f'Redeemed: {perk.title}',
-        )
-        Redemption.objects.create(
-            wallet=wallet,
-            perk=perk,
-            points_spent=perk.cost,
-        )
+            Transaction.objects.create(
+                wallet=wallet,
+                type=Transaction.REDEEM,
+                amount=perk.cost,
+                description=f'Redeemed: {perk.title}'[:200],
+            )
+            Redemption.objects.create(
+                wallet=wallet,
+                perk=perk,
+                points_spent=perk.cost,
+            )
 
         messages.success(request, f'You redeemed "{perk.title}"! Show this page at the campus desk to claim it.')
         return redirect(reverse('wallet:wallet'))

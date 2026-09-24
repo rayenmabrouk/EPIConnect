@@ -1,12 +1,15 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Max, Exists, OuterRef
+from django.db.models import Max
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView
 
-from .models import Conversation, Message
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
+
+from .forms import MessageForm
+from .models import Conversation
 from users.models import User
 
 
@@ -91,6 +94,7 @@ class StartConversationView(LoginRequiredMixin, View):
         return redirect('messaging:detail', pk=conversation.pk)
 
 
+@method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True), name='post')
 class SendMessageView(LoginRequiredMixin, View):
     """AJAX endpoint: send a message to a conversation."""
 
@@ -99,18 +103,15 @@ class SendMessageView(LoginRequiredMixin, View):
         if not conversation.participants.filter(pk=request.user.pk).exists():
             return JsonResponse({'error': 'Forbidden'}, status=403)
 
-        content = request.POST.get('content', '').strip()
-        image = request.FILES.get('image')
+        form = MessageForm(request.POST, request.FILES)
+        if not form.is_valid():
+            errors = [e for errs in form.errors.values() for e in errs]
+            return JsonResponse({'error': errors[0] if errors else 'Invalid message'}, status=400)
 
-        if not content and not image:
-            return JsonResponse({'error': 'Empty message'}, status=400)
-
-        msg = Message.objects.create(
-            conversation=conversation,
-            sender=request.user,
-            content=content,
-            image=image,
-        )
+        msg = form.save(commit=False)
+        msg.conversation = conversation
+        msg.sender = request.user
+        msg.save()
 
         # Update conversation timestamp
         conversation.save()

@@ -1,4 +1,6 @@
 from django.db import models
+
+from core.validators import IMAGE_VALIDATORS, RandomFilename
 from django.conf import settings
 
 
@@ -12,7 +14,9 @@ class Item(models.Model):
 
     title = models.CharField(max_length=200)
     description = models.TextField()
-    image = models.ImageField(upload_to='lostfound/', blank=True, null=True)
+    image = models.ImageField(
+        upload_to=RandomFilename('lostfound'), blank=True, null=True, validators=IMAGE_VALIDATORS,
+    )
     location = models.CharField(max_length=255)
     date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='lost')

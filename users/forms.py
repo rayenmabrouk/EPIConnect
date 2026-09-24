@@ -32,7 +32,7 @@ class UserRegistrationForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['password1'].help_text = 'At least 6 characters.'
+        self.fields['password1'].help_text = 'At least 8 characters, not entirely numeric, not a common password.'
         self.fields['password2'].help_text = ''
         for field in self.fields.values():
             field.widget.attrs['class'] = TAILWIND_INPUT
@@ -67,4 +67,9 @@ class StudentProfileForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs['class'] = TAILWIND_INPUT
-        self.fields['profile_picture'].widget = forms.FileInput(attrs={'class': TAILWIND_INPUT})
+        self.fields['profile_picture'].widget = forms.FileInput(attrs={'class': TAILWIND_INPUT, 'accept': 'image/*'})
+        # Once an admin has verified the student ID, the student cannot change it:
+        # otherwise a verified account could swap in someone else's ID.
+        if self.instance and self.instance.pk and self.instance.is_verified:
+            self.fields['student_id'].disabled = True
+            self.fields['student_id'].help_text = 'Verified. Contact an administrator to change it.'

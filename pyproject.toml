@@ -1,0 +1,22 @@
+# Tooling configuration only (the project is not a Python package)
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["*/migrations/*", "frontend", "infra"]
+
+[tool.ruff.lint]
+# pyflakes + pycodestyle errors + bugbear (likely bugs)
+select = ["E4", "E7", "E9", "F", "B"]
+
+[tool.bandit]
+exclude_dirs = ["frontend", "infra", ".venv", "venv", "staticfiles", "*/tests.py", "core/testutils.py"]
+skips = []
+
+[tool.coverage.run]
+source = ["."]
+omit = ["*/migrations/*", "*/tests.py", "core/testutils.py", "manage.py", "epiconnect/asgi.py", "epiconnect/wsgi.py", "docker/*", "frontend/*"]
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = true

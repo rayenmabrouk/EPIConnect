@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from core.validators import IMAGE_VALIDATORS, RandomFilename
+
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
@@ -12,7 +14,9 @@ class User(AbstractUser):
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     student_id = models.CharField(max_length=50, unique=True, blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    profile_picture = models.ImageField(
+        upload_to=RandomFilename('profiles'), blank=True, null=True, validators=IMAGE_VALIDATORS,
+    )
     bio = models.TextField(max_length=500, blank=True)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
