@@ -319,6 +319,7 @@ jobs:
         run: |
           APP_URL=$(aws ssm get-parameter --name /epiconnect/deploy/app_url --query Parameter.Value --output text)
           echo "### Deployed ${GITHUB_SHA::7} to ${APP_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Deployed::${GITHUB_SHA::7} is live at ${APP_URL}"
           scripts/smoke-test.sh "$APP_URL" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Roll back to the previous task definition

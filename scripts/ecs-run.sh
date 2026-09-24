@@ -34,4 +34,7 @@ aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "web/web
 EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
   --query 'tasks[0].containers[?name==`web`].exitCode | [0]' --output text)
 echo "exit code: $EXIT_CODE"
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  echo "::notice title=$1::exit code ${EXIT_CODE} - application at $(param app_url)"
+fi
 [ "$EXIT_CODE" = "0" ]
