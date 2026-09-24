@@ -67,8 +67,11 @@ resource "aws_route_table_association" "public" {
 # Security groups: internet -> ALB -> tasks -> database, nothing else
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "alb" {
-  name        = "${var.project}-alb"
-  description = "ALB: public HTTP entry point"
+  name = "${var.project}-alb"
+  # Kept from the first design (CloudFront in front): a security group
+  # description cannot be changed in place, and replacing the group while the
+  # ALB uses it fails. The rules below are what matters.
+  description = "ALB: HTTP from CloudFront edge locations only"
   vpc_id      = aws_vpc.main.id
 }
 
