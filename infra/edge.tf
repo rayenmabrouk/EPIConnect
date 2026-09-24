@@ -82,37 +82,18 @@ resource "aws_lb_listener_rule" "from_cloudfront" {
 }
 
 # --- CloudFront -------------------------------------------------------------
-data "aws_cloudfront_cache_policy" "disabled" {
-  name = "Managed-CachingDisabled"
-}
-
-data "aws_cloudfront_cache_policy" "optimized" {
-  name = "Managed-CachingOptimized"
-}
-
-# Dynamic pages: forward everything (cookies, query, Host, CloudFront-Forwarded-Proto)
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewerAndCloudFrontHeaders-2022-06"
-}
-
-data "aws_cloudfront_response_headers_policy" "security" {
-  name = "Managed-SecurityHeadersPolicy"
-}
-
-# Static files: cacheable, but Django still needs Host and the original scheme
-resource "aws_cloudfront_origin_request_policy" "static" {
-  name = "${var.project}-static"
-  cookies_config {
-    cookie_behavior = "none"
-  }
-  query_strings_config {
-    query_string_behavior = "none"
-  }
-  headers_config {
-    header_behavior = "whitelist"
-    headers {
-      items = ["Host", "CloudFront-Forwarded-Proto"]
-    }
+# AWS-managed policies, referenced by their fixed public IDs. (Looking them up
+# with data sources needs cloudfront:List*Policies, which AWS Academy denies.)
+locals {
+  cf_policy = {
+    # Managed-CachingDisabled
+    caching_disabled = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    # Managed-CachingOptimized
+    caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    # Managed-AllViewerAndCloudFrontHeaders-2022-06
+    all_viewer_and_cf = "33f36d7e-f396-46d9-90e0-52428a34d9dc"
+    # Managed-SecurityHeadersPolicy
+    security_headers = "67f7725c-6f97-4210-82d7-5512b31e9d03"
   }
 }
 
@@ -132,6 +113,7 @@ resource "aws_cloudfront_distribution" "main" {
   #checkov:skip=CKV_AWS_374:Campus application, no geographic restriction required
   #checkov:skip=CKV_AWS_310:Single origin region by design; failover is out of scope for the demo
   #checkov:skip=CKV_AWS_305:Dynamic application; "/" is served by Django, no root object
+  #checkov:skip=CKV2_AWS_32:Managed security-headers policy is attached to /media/* (Checkov cannot resolve the ID local); Django sets them on app responses
   enabled         = true
   comment         = "${var.project} - app + media"
   is_ipv6_enabled = true
@@ -165,19 +147,21 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    cache_policy_id          = local.cf_policy.caching_disabled
+    origin_request_policy_id = local.cf_policy.all_viewer_and_cf
     compress                 = true
   }
 
+  # Static files: cache key is the path only; the origin still receives Host
+  # and CloudFront-Forwarded-Proto, which Django needs to answer the request.
   ordered_cache_behavior {
     path_pattern             = "/static/*"
     target_origin_id         = "alb"
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD"]
     cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = data.aws_cloudfront_cache_policy.optimized.id
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.static.id
+    cache_policy_id          = local.cf_policy.caching_optimized
+    origin_request_policy_id = local.cf_policy.all_viewer_and_cf
     compress                 = true
   }
 
@@ -187,8 +171,8 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = data.aws_cloudfront_cache_policy.optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security.id
+    cache_policy_id            = local.cf_policy.caching_optimized
+    response_headers_policy_id = local.cf_policy.security_headers
     compress                   = true
   }
 
