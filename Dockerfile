@@ -20,7 +20,7 @@ COPY users/forms.py lostfound/forms.py marketplace/forms.py social/forms.py /bui
 RUN npm run build
 
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /opt/venv
@@ -30,7 +30,7 @@ RUN /opt/venv/bin/pip install --require-hashes --no-deps -r /tmp/requirements.tx
  && /opt/venv/bin/python -m pip uninstall --yes pip
 
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="EPIConnect" \
       org.opencontainers.image.description="Campus community platform (Django)" \
