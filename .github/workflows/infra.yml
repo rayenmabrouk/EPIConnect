@@ -24,6 +24,11 @@ on:
 permissions:
   contents: read
 
+# Explicit bash = -eo pipefail: a failing command piped into tee must fail the step
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: terraform-state
   cancel-in-progress: false
