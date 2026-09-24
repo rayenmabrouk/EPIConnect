@@ -1,0 +1,12 @@
+# ZAP baseline rule overrides: <rule id>	<IGNORE|WARN|FAIL>	<note>
+# FAIL = regression of a control this project relies on; the pipeline stops.
+10020	FAIL	Anti-clickjacking header (X-Frame-Options / frame-ancestors)
+10021	FAIL	X-Content-Type-Options: nosniff
+10038	FAIL	Content-Security-Policy header present
+10010	FAIL	Cookie without HttpOnly (csrftoken/sessionid are HttpOnly)
+10011	FAIL	Cookie without Secure flag
+10054	FAIL	Cookie without SameSite
+10023	FAIL	Debug error messages disclosed
+90022	FAIL	Application error disclosure (stack traces)
+10036	FAIL	Server header leaks version
+10035	IGNORE	HSTS not set: the CI container is scanned over plain HTTP; HSTS is verified by the post-deploy smoke test over HTTPS

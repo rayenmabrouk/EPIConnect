@@ -1,0 +1,2 @@
+# Trivy vulnerability exceptions. Each entry needs: CVE id, why it is accepted,
+# and a review date. Empty means every fixable HIGH/CRITICAL finding fails the build.

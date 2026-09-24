@@ -1,0 +1,125 @@
+# Infrastructure changes (Terraform). Separate from application delivery on
+# purpose: infrastructure changes are rare and reviewed; app deploys are routine.
+#
+#   pull request touching infra/ : plan, shown in the run summary
+#   manual run  "plan"           : plan only
+#   manual run  "apply"          : plan, then apply exactly that saved plan
+#                                  (the "infrastructure" environment can require approval)
+#   manual run  "destroy"        : tear everything down (student budget)
+
+name: Infrastructure
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  # checkov:skip=CKV_GHA_7:Not a build workflow; the input only selects plan/apply/destroy of reviewed code
+  workflow_dispatch:
+    inputs:
+      action:
+        description: plan, apply or destroy
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-state
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request' || inputs.action != 'destroy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.13.*"
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+      - name: State bucket (idempotent) + init
+        run: |
+          BUCKET=$(scripts/bootstrap-tfstate.sh)
+          terraform -chdir=infra init -backend-config="bucket=${BUCKET}"
+      - name: Plan
+        run: |
+          terraform -chdir=infra plan -out=tfplan -no-color | tee plan.txt
+          { echo '### Terraform plan'; echo '```'; grep -E '^(Plan:|No changes|  # )' plan.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tfplan
+          path: |
+            infra/tfplan
+            infra/.terraform.lock.hcl
+          retention-days: 3
+
+  apply:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: infrastructure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.13.*"
+          terraform_wrapper: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tfplan
+          path: infra
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+      - name: Apply the reviewed plan
+        run: |
+          BUCKET="epiconnect-tfstate-$(aws sts get-caller-identity --query Account --output text)"
+          terraform -chdir=infra init -backend-config="bucket=${BUCKET}"
+          terraform -chdir=infra apply tfplan
+          { echo '### Outputs'; echo '```'; terraform -chdir=infra output; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: infrastructure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.13.*"
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+      - name: Destroy
+        run: |
+          BUCKET="epiconnect-tfstate-$(aws sts get-caller-identity --query Account --output text)"
+          terraform -chdir=infra init -backend-config="bucket=${BUCKET}"
+          terraform -chdir=infra destroy -auto-approve

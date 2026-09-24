@@ -1,0 +1,319 @@
+# EPIConnect delivery pipeline
+#
+#   pull request : test -> security (secrets, SAST, SCA, IaC) -> image (build,
+#                  scan, run, DAST)
+#   push to main : the same gates, then push to ECR -> migrate -> rolling
+#                  deploy on ECS Fargate -> smoke test through CloudFront
+#                  (automatic rollback if the smoke test fails)
+#
+# Third-party actions are pinned to full commit SHAs (tag in the comment) so a
+# moved or compromised tag cannot change what runs here. Dependabot bumps them.
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: "3.13"
+  IMAGE_NAME: epiconnect
+
+jobs:
+  # -------------------------------------------------------------------------
+  test:
+    name: Tests (PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: epiconnect
+          POSTGRES_USER: epiconnect
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U epiconnect" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://epiconnect:ci-only@localhost:5432/epiconnect
+      DEBUG: "true"
+      STATIC_MANIFEST: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install (hash-verified)
+        run: pip install --require-hashes -r requirements.txt -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Migrations are complete
+        run: python manage.py makemigrations --check --dry-run
+      - name: Production settings pass Django's deployment checklist
+        env:
+          DEBUG: "false"
+          SECRET_KEY: ${{ github.run_id }}-check-deploy-only-not-a-secret-0123456789abcdef
+          ALLOWED_HOSTS: epiconnect.example
+          SECURE_PROXY_SSL_HEADER: HTTP_CLOUDFRONT_FORWARDED_PROTO
+        run: python manage.py check --deploy --fail-level WARNING
+      - name: Unit / integration tests with coverage
+        run: |
+          coverage run manage.py test --verbosity 2
+          coverage report
+          coverage xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage.xml
+          retention-days: 14
+
+  # -------------------------------------------------------------------------
+  security:
+    name: Security (secrets, SAST, dependencies, IaC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history: secrets committed in the past count too
+          persist-credentials: false
+
+      - name: Secret scanning (gitleaks, whole git history)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install security tooling (hash-verified)
+        run: pip install --require-hashes -r requirements-dev.txt
+
+      - name: SAST - Python (Bandit)
+        run: bandit -r . -c pyproject.toml
+
+      - name: SCA - Python dependencies (pip-audit, OSV + PyPI advisories)
+        run: |
+          pip-audit -r requirements.txt --require-hashes --disable-pip --strict
+          pip-audit -r requirements-dev.txt --require-hashes --disable-pip --strict
+
+      - name: SCA - build-time npm dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - name: Dockerfile lint (hadolint)
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+      - name: CI/CD pipeline security (zizmor - injection, permissions, pinning)
+        run: |
+          pip install zizmor==1.30.1
+          zizmor --offline --min-severity medium .github/workflows
+
+      - name: IaC and workflow misconfiguration scan (Checkov)
+        run: |
+          pip install checkov==3.3.19
+          checkov --directory . --framework terraform dockerfile github_actions \
+            --compact --quiet
+
+  # -------------------------------------------------------------------------
+  terraform:
+    name: Terraform fmt / validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.13.*"
+          terraform_wrapper: false
+      - run: terraform -chdir=infra fmt -check -recursive
+      - run: terraform -chdir=infra init -backend=false -input=false
+      - run: terraform -chdir=infra validate
+
+  # -------------------------------------------------------------------------
+  image:
+    name: Image (build, scan, run, DAST)
+    needs: [test, security, terraform]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # upload Trivy results to the Security tab
+    outputs:
+      image_uri: ${{ steps.push.outputs.image_uri }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          provenance: false # ECR basic scanning cannot read attestation manifests
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image vulnerability gate (Trivy - fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+          scanners: vuln,secret
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      - name: Image scan report (SARIF, all severities)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Upload scan to GitHub code scanning
+        if: always() && github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          skip-setup-trivy: true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          retention-days: 90
+
+      - name: Run the image like ECS does and test it
+        run: scripts/ci-container-test.sh "${IMAGE_NAME}:${GITHUB_SHA}"
+
+      - name: DAST - OWASP ZAP baseline scan of the running container
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: http://localhost:8000/
+          rules_file_name: .zap/rules.tsv
+          cmd_options: -a -I # alpha passive rules; WARN rules never fail, FAIL rules in .zap/rules.tsv do
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-baseline-report
+
+      - name: Container logs
+        if: failure()
+        run: docker logs ci-web 2>&1 | tail -100 || true
+
+      # ------------------ main branch only: publish to ECR ------------------
+      - name: AWS credentials
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Push to ECR (immutable tag = commit SHA)
+        id: push
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          REPO=$(aws ssm get-parameter --name /epiconnect/deploy/ecr_repository --query Parameter.Value --output text)
+          REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          docker tag "${IMAGE_NAME}:${GITHUB_SHA}" "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          docker push "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          docker logout "$REGISTRY"
+          echo "image_uri=${REGISTRY}/${REPO}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+  # -------------------------------------------------------------------------
+  deploy:
+    name: Deploy to AWS (ECS Fargate)
+    needs: image
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Migrate + rolling deploy
+        id: deploy
+        env:
+          IMAGE_URI: ${{ needs.image.outputs.image_uri }}
+        run: scripts/ecs-deploy.sh "$IMAGE_URI"
+
+      - name: Smoke test through CloudFront
+        id: smoke
+        run: |
+          APP_URL=$(aws ssm get-parameter --name /epiconnect/deploy/app_url --query Parameter.Value --output text)
+          echo "### Deployed ${GITHUB_SHA::7} to ${APP_URL}" >> "$GITHUB_STEP_SUMMARY"
+          scripts/smoke-test.sh "$APP_URL" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Roll back to the previous task definition
+        if: failure() && steps.deploy.outputs.previous_task_definition != ''
+        env:
+          PREVIOUS_TD: ${{ steps.deploy.outputs.previous_task_definition }}
+        run: |
+          CLUSTER=$(aws ssm get-parameter --name /epiconnect/deploy/cluster --query Parameter.Value --output text)
+          SERVICE=$(aws ssm get-parameter --name /epiconnect/deploy/service --query Parameter.Value --output text)
+          echo "::warning::Rolling back to $PREVIOUS_TD"
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$PREVIOUS_TD" --query service.serviceName
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          echo "### Rolled back to $PREVIOUS_TD" >> "$GITHUB_STEP_SUMMARY"
