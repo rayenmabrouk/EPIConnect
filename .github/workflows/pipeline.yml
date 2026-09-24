@@ -255,9 +255,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
 
+      - name: Infrastructure provisioned?
+        id: infra
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          if aws ssm get-parameter --name /epiconnect/deploy/ecr_repository >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AWS infrastructure not found (run the Infrastructure workflow with 'apply'). Image not published, deploy skipped."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Push to ECR (immutable tag = commit SHA)
         id: push
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: steps.infra.outputs.ready == 'true'
         run: |
           REPO=$(aws ssm get-parameter --name /epiconnect/deploy/ecr_repository --query Parameter.Value --output text)
           REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com
@@ -271,7 +282,7 @@ jobs:
   deploy:
     name: Deploy to AWS (ECS Fargate)
     needs: image
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: needs.image.outputs.image_uri != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
