@@ -20,10 +20,9 @@ EPIConnect is a community platform for university students. It is a server-rende
 
 17 models in PostgreSQL. No separate front-end framework: Django templates, Tailwind CSS and a small amount of vanilla JavaScript.
 
-### Who built what
+### Project scope
 
-
-What this project demonstrates as Rayen's work is the engineering *around and on top of* the application: defining what the platform must do, choosing the architecture and the technologies, and taking the application from a single hand-configured Azure VM to a containerised, secured, monitored AWS deployment with an automated delivery pipeline, then operating and explaining that system. The modernisation work described in sections 4-8 was also carried out with an AI assistant doing much of the implementation, under Rayen's direction, with Rayen providing the AWS environment, running and verifying the deployment, and owning the decisions documented here.
+This project focuses on the engineering *around and on top of* the application: defining what the platform must do, choosing the architecture and the technologies, and taking the application from a single hand-configured Azure VM to a containerised, secured, monitored AWS deployment with an automated delivery pipeline, then operating and explaining that system. The modernisation work is described in sections 4-8.
 
 CloudPulse (Rayen's other project) is the mirror image: an existing open-source application (dpaste) with infrastructure built around it. EPIConnect is the "own product, modernised and secured" story.
 
