@@ -44,8 +44,7 @@ Why these services, the request path, and the trade-offs: [docs/ARCHITECTURE.md]
 - **Live end-to-end check** against the deployed URL: registration (RDS), login (session + CSRF), profile-picture upload to S3 through the task role, and the pre-signed image URL loading under the Content-Security-Policy.
 - **Torn down** afterwards with the Infrastructure workflow (`destroy`) to save lab credit. Only the tiny Terraform state bucket remains. Recreate: Infrastructure -> `apply`, then CI/CD -> run workflow, then Ops -> `bootstrap_admin` ([runbook](docs/RUNBOOK.md#first-deployment-to-aws-aws-academy)).
 
-## How this was built
-
+## Related project
 
 My other project, [CloudPulse](https://github.com/rayenmabrouk/cloudpulse), is the complement: an existing open-source app with AWS infrastructure (EC2, Terraform modules, Prometheus/Grafana) built around it.
 
