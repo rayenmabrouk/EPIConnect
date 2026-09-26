@@ -28,7 +28,6 @@ db.sqlite3
 .idea/
 *.swp
 
-
 # OS
 .DS_Store
 Thumbs.db
